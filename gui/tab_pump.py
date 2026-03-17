@@ -53,16 +53,24 @@ class PumpTab:
     # ---- UI -----------------------------------------------------------------
 
     def _build(self) -> None:
-        pad = {"padx": 6, "pady": 4}
+        pad = {"padx": 4, "pady": 2}
 
         container = ttk.Frame(self._frame)
-        container.pack(fill="both", expand=True, padx=10, pady=10)
+        container.pack(fill="both", expand=True, padx=8, pady=8)
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(3, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        panes = ttk.Panedwindow(container, orient="horizontal")
+        panes.grid(row=0, column=0, sticky="nsew")
+
+        top = ttk.Frame(panes)
+        top.columnconfigure(0, weight=1)
+        top.columnconfigure(1, weight=1)
+        panes.add(top, weight=1)
 
         # Connection
-        conn = ttk.LabelFrame(container, text="Connection (Chemyx)")
-        conn.grid(row=0, column=0, sticky="ew")
+        conn = ttk.LabelFrame(top, text="Connection (Chemyx)")
+        conn.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         conn.columnconfigure(1, weight=1)
 
         self._var_sim = tk.BooleanVar(value=False)
@@ -110,8 +118,8 @@ class PumpTab:
         self._lbl_conn.grid(row=3, column=3, sticky="e", **pad)
 
         # Parameters
-        params = ttk.LabelFrame(container, text="Parameters")
-        params.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        params = ttk.LabelFrame(top, text="Parameters")
+        params.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=(6, 0))
         params.columnconfigure(1, weight=1)
 
         ttk.Label(params, text="Units:").grid(row=0, column=0, sticky="e", **pad)
@@ -162,13 +170,14 @@ class PumpTab:
         )
 
         # Controls
-        ctl = ttk.LabelFrame(container, text="Controls")
-        ctl.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        ctl = ttk.LabelFrame(top, text="Controls")
+        ctl.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        ctl.columnconfigure(1, weight=1)
 
-        ttk.Button(ctl, text="Status", command=lambda: self._threaded(self._do_status)).grid(
+        ttk.Button(ctl, text="Pump Status", command=lambda: self._threaded(self._do_status)).grid(
             row=0, column=0, sticky="w", **pad
         )
-        ttk.Button(ctl, text="Status Port", command=lambda: self._threaded(self._do_status_port)).grid(
+        ttk.Button(ctl, text="Port Status", command=lambda: self._threaded(self._do_status_port)).grid(
             row=0, column=1, sticky="w", **pad
         )
         ttk.Button(ctl, text="Start", command=lambda: self._threaded(self._do_start)).grid(
@@ -197,12 +206,17 @@ class PumpTab:
         )
 
         # Log
-        log_frame = ttk.LabelFrame(container, text="Log")
-        log_frame.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
+        log_frame = ttk.LabelFrame(panes, text="Log")
         log_frame.columnconfigure(0, weight=1)
+        log_frame.columnconfigure(1, weight=0)
         log_frame.rowconfigure(0, weight=1)
-        self._log_text = tk.Text(log_frame, height=10, state="disabled")
-        self._log_text.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        panes.add(log_frame, weight=2)
+
+        self._log_text = tk.Text(log_frame, height=12, state="disabled")
+        self._log_text.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=6)
+        yscroll = ttk.Scrollbar(log_frame, orient="vertical", command=self._log_text.yview)
+        yscroll.grid(row=0, column=1, sticky="ns", padx=(4, 6), pady=6)
+        self._log_text.configure(yscrollcommand=yscroll.set)
         self._flush_early_logs()
 
         self._disable_group = [
@@ -448,7 +462,8 @@ class PumpTab:
         if not callable(self._add_to_queue):
             return
         item = {
-            "type": "pump",
+            "type": f"PUMP_{action_name}",
+            "status": "pending",
             "details": details,
             "pump_action": {"name": action_name, "params": params},
         }
