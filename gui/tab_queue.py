@@ -700,6 +700,12 @@ class QueueTab:
             messagebox.showwarning("Empty Queue", "No items in queue."); return
         if self._session.is_running:
             messagebox.showwarning("Already Running", "Queue already running."); return
+        if not self._has_motion_step(start_index=0):
+            messagebox.showwarning(
+                "No Motion Step",
+                "Queue contains no motion/measurement step. "
+                "Pump APPLY only sets parameters and does not move liquid.",
+            )
         self._session.is_running = True
         self._session.update_queue_status(
             state="running",
@@ -733,6 +739,12 @@ class QueueTab:
         except Exception:
             messagebox.showerror("Selection Error", "Could not determine selected item.")
             return
+        if not self._has_motion_step(start_index=idx):
+            messagebox.showwarning(
+                "No Motion Step",
+                "Selected range has no motion/measurement step. "
+                "Pump APPLY only sets parameters and does not move liquid.",
+            )
         self._session.is_running = True
         self._session.update_queue_status(
             state="running",
@@ -751,14 +763,68 @@ class QueueTab:
         )
         self._queue_thread.start()
 
+    def _has_motion_step(self, start_index: int) -> bool:
+        items = self._session.measurement_queue[start_index:]
+        for item in items:
+            t = str(item.get("type") or "").upper()
+            if not t:
+                continue
+            if t in {"PAUSE", "ALERT"}:
+                continue
+            if t.startswith("PUMP_"):
+                action = str((item.get("pump_action") or {}).get("name") or "").upper()
+                if action in {"HEXW2", "START"}:
+                    return True
+                continue
+            return True
+        return False
+
     def stop_queue(self):
-        if not self._session.is_running:
-            return
+        queue_was_running = bool(self._session.is_running)
         self.log("Queue stop requested.")
         self._session.is_running = False
         self._session.stop_current_runner()
         self._session.update_queue_status(state="stopping")
-        self.set_status("Queue Stopped")
+        self.set_status("Queue Stopping")
+
+        # Always try to force pump out of motion on stop. Run in background to
+        # keep the UI responsive if serial calls take up to timeout.
+        threading.Thread(target=self._force_stop_and_restart_pump, daemon=True).start()
+
+        if not queue_was_running:
+            self._session.update_queue_status(state="stopped")
+            self.set_status("Queue Stopped")
+
+    def _force_stop_and_restart_pump(self) -> None:
+        ctrl = self._pump_ctrl
+        if ctrl is None:
+            self.log("Queue stop: pump backend unavailable.")
+            return
+        if not getattr(ctrl, "connected", False):
+            self.log("Queue stop: pump not connected.")
+            return
+        try:
+            try:
+                prep = ctrl.status_port()
+                self._log_pump_status("status port (stop)", prep)
+            except Exception:
+                pass
+            try:
+                resp = ctrl.stop()
+                if resp:
+                    self.log(f"Pump <- {resp}")
+            except Exception as exc:
+                self.log(f"Queue stop: pump stop failed: {exc}")
+            try:
+                resp = ctrl.restart()
+                if resp:
+                    self.log(f"Pump <- {resp}")
+                self.log("Queue stop: pump restart sent.")
+            except Exception as exc:
+                self.log(f"Queue stop: pump restart failed: {exc}")
+        finally:
+            self._session.update_queue_status(state="stopped")
+            self._root.after(0, self.set_status, "Queue Stopped")
 
     def _execute_queue(self, start_index: int = 0):
         queue = list(self._session.measurement_queue)
@@ -1067,6 +1133,13 @@ class QueueTab:
 
         self.log(f"Queue pump -> {details}")
         try:
+            if name not in {"STATUS", "STATUS_PORT"}:
+                try:
+                    prep = self._pump_ctrl.status_port()
+                    self._log_pump_status("status port (prep)", prep)
+                except Exception:
+                    pass
+
             # Chemyx actions
             if name == "COMMAND":
                 cmd = str(params.get("cmd", "")).strip()
@@ -1083,32 +1156,42 @@ class QueueTab:
                 self._pump_ctrl.set_rate(float(params["rate"]))
                 self._pump_ctrl.set_volume(float(params["volume"]))
                 self._pump_ctrl.set_mode(str(params["mode"]))
+                self.log("Pump APPLY executed (parameters only, no movement).")
                 return True
 
             if name == "HEXW2":
+                run_kwargs = {
+                    "units": str(params["units"]),
+                    "mode": str(params["mode"]),
+                    "diameter_mm": float(params["diameter_mm"]),
+                    "volume": float(params["volume"]),
+                    "rate": float(params["rate"]),
+                    "delay_min": float(params.get("delay_min", 0.0)),
+                    "start": bool(params.get("start", False)),
+                }
                 resp = self._pump_ctrl.hexw2(
-                    units=str(params["units"]),
-                    mode=str(params["mode"]),
-                    diameter_mm=float(params["diameter_mm"]),
-                    volume=float(params["volume"]),
-                    rate=float(params["rate"]),
-                    delay_min=float(params.get("delay_min", 0.0)),
-                    start=bool(params.get("start", False)),
+                    **run_kwargs
                 )
                 if resp:
                     self.log(f"Pump <- {resp}")
+                if bool(params.get("start", False)):
+                    if not self._ensure_pump_started(run_kwargs):
+                        self.log("Pump run did not start (status stayed complete/idle).")
+                        return False
+                    return self._wait_for_pump_complete(params)
                 return True
 
             if name == "STATUS":
                 resp = self._pump_ctrl.status()
-                self.log(f"Pump status: {resp or '(no response)'}")
+                self._log_pump_status("status", resp)
                 return True
             if name == "STATUS_PORT":
                 resp = self._pump_ctrl.status_port()
-                self.log(f"Pump status port: {resp or '(no response)'}")
+                self._log_pump_status("status port", resp)
                 return True
             if name == "START":
-                self._pump_ctrl.start(); return True
+                self._pump_ctrl.start()
+                return True
             if name == "PAUSE":
                 self._pump_ctrl.pause(); return True
             if name == "STOP":
@@ -1119,3 +1202,154 @@ class QueueTab:
             self.log(f"Unsupported pump action: {name}"); return False
         except Exception as exc:
             self.log(f"Pump action failed: {exc}"); return False
+
+    def _log_pump_status(self, label: str, resp: str) -> None:
+        text = (resp or "").strip()
+        if not text:
+            self.log(f"Pump {label}: (no response)")
+            return
+        self.log(f"Pump {label}: {text}")
+        code = self._parse_status_code(text)
+        if code is not None:
+            state = self._status_text(code)
+            self.log(f"Pump ops/status code: {code} ({state})")
+
+    @staticmethod
+    def _parse_status_code(text: str) -> int | None:
+        try:
+            nums = re.findall(r"(-?\d+)", text or "")
+            return int(nums[-1]) if nums else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _status_text(code: int) -> str:
+        return {0: "complete", 1: "running", 2: "paused"}.get(code, "unknown")
+
+    def _ensure_pump_started(self, run_kwargs: dict) -> bool:
+        """Confirm that a run command actually transitions out of code 0.
+
+        Some devices can ignore the first run command depending on prior state.
+        We verify status, then retry once with status-port + HEXW2 if needed.
+        """
+        def _poll_started(timeout_s: float = 4.0) -> bool:
+            t0 = time.monotonic()
+            while self._session.is_running and (time.monotonic() - t0) < timeout_s:
+                try:
+                    code = self._parse_status_code(self._pump_ctrl.status())
+                    if code in (1, 2):
+                        self.log(f"Pump start confirmed: {self._status_text(code)} (code {code})")
+                        return True
+                except Exception:
+                    pass
+                time.sleep(0.5)
+            return False
+
+        if _poll_started():
+            return True
+
+        self.log("Pump start not confirmed; retrying run command once.")
+        try:
+            prep = self._pump_ctrl.status_port()
+            self._log_pump_status("status port (retry)", prep)
+        except Exception:
+            pass
+        try:
+            self._pump_ctrl.hexw2(**run_kwargs)
+        except Exception as exc:
+            self.log(f"Pump retry command failed: {exc}")
+            return False
+        return _poll_started()
+
+    def _wait_for_pump_complete(self, params: dict) -> bool:
+        """Block the queue until pump reports completion (status code 0).
+
+        Confirmed mapping (user): 0=complete, 1=running, 2=paused.
+        """
+        if not self._session.is_running:
+            return False
+        # Estimate duration from volume/rate/units (best-effort).
+        try:
+            units = str(params.get("units") or "").lower().strip()
+            volume = float(params.get("volume"))
+            rate = float(params.get("rate"))
+            if rate <= 0:
+                est_s = 0.0
+            elif units.endswith("min"):
+                est_s = (volume / rate) * 60.0
+            elif units.endswith("hr"):
+                est_s = (volume / rate) * 3600.0
+            else:
+                est_s = (volume / rate) * 60.0
+        except Exception:
+            est_s = 0.0
+
+        if est_s > 0:
+            self.log(f"Pump wait: est. {est_s:.1f}s; verifying completion via status polling.")
+        else:
+            self.log("Pump wait: verifying completion via status polling.")
+
+        start = time.monotonic()
+        last_code = None
+        seen_running = False
+        paused_streak = 0
+        unpause_attempted = False
+        post_estimate_confirm_s = 1.0 if est_s > 0 else 0.0
+        hard_timeout_s = (est_s + 20.0) if est_s > 0 else 15.0
+        while self._session.is_running:
+            try:
+                resp = self._pump_ctrl.status()
+                code = None
+                try:
+                    nums = re.findall(r"(-?\d+)", resp or "")
+                    if nums:
+                        code = int(nums[-1])
+                except Exception:
+                    code = None
+
+                if code is not None and code != last_code:
+                    last_code = code
+                    state = self._status_text(code)
+                    self.log(f"Pump status -> {state} (code {code})")
+                if code == 1:
+                    seen_running = True
+                    paused_streak = 0
+                elif code == 2:
+                    paused_streak += 1
+                else:
+                    paused_streak = 0
+
+                if code == 0:
+                    elapsed = time.monotonic() - start
+                    # Require either a real running state, or a post-estimate confirm delay.
+                    if seen_running or elapsed >= (est_s + post_estimate_confirm_s):
+                        return True
+
+                # If pump stays paused during an active run step, nudge once.
+                if code == 2 and paused_streak >= 3 and not unpause_attempted:
+                    unpause_attempted = True
+                    self.log("Pump paused during run step; trying status-port + start once.")
+                    try:
+                        prep = self._pump_ctrl.status_port()
+                        self._log_pump_status("status port (auto-recover)", prep)
+                    except Exception:
+                        pass
+                    try:
+                        self._pump_ctrl.start()
+                    except Exception:
+                        pass
+            except Exception as exc:
+                self.log(f"Pump status poll failed: {exc}")
+
+            elapsed = time.monotonic() - start
+            if elapsed >= hard_timeout_s:
+                self.log("Pump wait timeout: completion not confirmed.")
+                return False
+
+            # Poll faster near/after estimated end.
+            if est_s > 0 and elapsed >= max(0.0, est_s - 2.0):
+                time.sleep(0.5)
+            else:
+                time.sleep(1.0)
+
+        return False

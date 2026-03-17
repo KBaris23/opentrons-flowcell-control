@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Optional
 
 
-BAUD_CANDIDATES: list[int] = [38400, 9600, 115200, 57600, 19200, 14400]
+# Prefer 9600 first (common field setup), then try higher rates.
+BAUD_CANDIDATES: list[int] = [9600, 38400, 115200, 57600, 19200, 14400]
 
 UNITS_MAP = {
     "mlmin": 0,  # mL/min
@@ -175,7 +176,8 @@ class ChemyxPumpCtrl:
     def __init__(self, log_cb: Callable[[str], None] = print, verbose: bool = False) -> None:
         self._log_cb = log_cb
         self._verbose = verbose
-        self._lock = threading.Lock()
+        # Re-entrant because connect() may call disconnect() while holding the lock.
+        self._lock = threading.RLock()
         self._ser: Optional[Any] = None
         self._sim: Optional[_SimChemyxBackend] = None
         self._eol = "\r"
@@ -306,12 +308,23 @@ class ChemyxPumpCtrl:
         if self._sim is not None:
             return ""
         assert self._ser is not None
-        time.sleep(0.1)
+        start = time.monotonic()
+        timeout_s = float(getattr(self._settings, "timeout_s", 1.0) if self._settings else 1.0)
+        deadline = start + max(0.2, timeout_s)
+
         data = b""
-        while self._ser.in_waiting:
-            data += self._ser.read(self._ser.in_waiting)
-            time.sleep(0.05)
-        return data.decode(errors="ignore").strip()
+        # Poll briefly to catch delayed responses (many pumps reply after a short
+        # think-time, and may end with a '>' prompt).
+        while time.monotonic() < deadline:
+            waiting = int(getattr(self._ser, "in_waiting", 0) or 0)
+            if waiting:
+                data += self._ser.read(waiting)
+                if b">" in data:
+                    break
+            else:
+                time.sleep(0.03)
+
+        return data.decode(errors="ignore").replace("\r", "").strip()
 
     def _send_raw(self, cmd: str) -> str:
         if self._sim is not None:
@@ -340,12 +353,13 @@ class ChemyxPumpCtrl:
             return ""
         cmd_low = cmd_stripped.lower()
         with self._lock:
-            if cmd_low.startswith("clrf"):
-                # Field quirk: ensure a status query precedes clrf when paused.
+            if cmd_low.startswith(("clrf", "hexw2", "start", "set ")):
+                # Field quirk: in some setups commands only work reliably after a
+                # `status port` query (especially after pause/stop). Do best-effort.
                 try:
                     self._send_raw("status port")
                 except Exception:
-                    # Best-effort; still attempt clrf.
+                    # Best-effort; still attempt the command.
                     pass
             return self._send_raw(cmd_stripped)
 

@@ -164,6 +164,7 @@ class RecipeMakerTab:
 
     def _build_pump_editor(self, parent):
         pad = {"padx": 6, "pady": 4}
+        from config import SYRINGE_PRESETS_MM
 
         ttk.Label(parent, text="Pump action:").grid(row=0, column=0, **pad, sticky="e")
         self._pump_action = tk.StringVar(value="HEXW2")
@@ -207,45 +208,74 @@ class RecipeMakerTab:
             state="readonly",
         ).grid(row=0, column=5, **pad, sticky="w")
 
-        ttk.Label(parent, text="Diameter (mm):").grid(row=0, column=6, **pad, sticky="e")
+        ttk.Label(parent, text="Diameter (mm) (syringe ID):").grid(row=0, column=6, **pad, sticky="e")
         self._pump_diameter_mm = tk.DoubleVar(value=11.73)
         ttk.Entry(parent, width=10, textvariable=self._pump_diameter_mm).grid(
             row=0, column=7, **pad, sticky="w"
         )
 
-        ttk.Label(parent, text="Rate:").grid(row=1, column=0, **pad, sticky="e")
-        self._pump_rate = tk.DoubleVar(value=1.0)
-        ttk.Entry(parent, width=10, textvariable=self._pump_rate).grid(row=1, column=1, **pad, sticky="w")
+        ttk.Label(parent, text="Syringe preset:").grid(row=1, column=0, **pad, sticky="e")
+        self._pump_syringe = tk.StringVar(value="Custom")
+        syringe_values = ["Custom"] + sorted(SYRINGE_PRESETS_MM.keys())
+        syringe_combo = ttk.Combobox(
+            parent,
+            textvariable=self._pump_syringe,
+            values=syringe_values,
+            width=22,
+            state="readonly",
+        )
+        syringe_combo.grid(row=1, column=1, columnspan=2, **pad, sticky="w")
 
-        ttk.Label(parent, text="Volume:").grid(row=1, column=2, **pad, sticky="e")
-        self._pump_volume = tk.DoubleVar(value=25.0)
-        ttk.Entry(parent, width=10, textvariable=self._pump_volume).grid(row=1, column=3, **pad, sticky="w")
+        def _apply_preset(_e=None):
+            key = (self._pump_syringe.get() or "").strip()
+            if not key or key == "Custom":
+                return
+            mm = SYRINGE_PRESETS_MM.get(key)
+            if mm is None:
+                return
+            try:
+                self._pump_diameter_mm.set(float(mm))
+            except Exception:
+                pass
 
-        ttk.Label(parent, text="Delay (min):").grid(row=1, column=4, **pad, sticky="e")
-        self._pump_delay_min = tk.DoubleVar(value=0.0)
-        ttk.Entry(parent, width=10, textvariable=self._pump_delay_min).grid(row=1, column=5, **pad, sticky="w")
-
-        ttk.Label(parent, text="Wait (sec):").grid(row=1, column=6, **pad, sticky="e")
-        self._wait_seconds = tk.DoubleVar(value=10.0)
-        ttk.Entry(parent, width=10, textvariable=self._wait_seconds).grid(row=1, column=7, **pad, sticky="w")
-
-        ttk.Label(parent, text="Raw cmd:").grid(row=2, column=0, **pad, sticky="e")
-        self._pump_raw_cmd = tk.StringVar(value="")
-        ttk.Entry(parent, width=60, textvariable=self._pump_raw_cmd).grid(
-            row=2, column=1, columnspan=7, **pad, sticky="w"
+        syringe_combo.bind("<<ComboboxSelected>>", _apply_preset)
+        ttk.Label(parent, text="Tip: Diameter = syringe inner diameter (ID).", foreground="#666").grid(
+            row=1, column=3, columnspan=5, padx=6, pady=4, sticky="w"
         )
 
-        ttk.Label(parent, text="Alert message:").grid(row=3, column=0, **pad, sticky="e")
+        ttk.Label(parent, text="Rate:").grid(row=2, column=0, **pad, sticky="e")
+        self._pump_rate = tk.DoubleVar(value=1.0)
+        ttk.Entry(parent, width=10, textvariable=self._pump_rate).grid(row=2, column=1, **pad, sticky="w")
+
+        ttk.Label(parent, text="Volume:").grid(row=2, column=2, **pad, sticky="e")
+        self._pump_volume = tk.DoubleVar(value=25.0)
+        ttk.Entry(parent, width=10, textvariable=self._pump_volume).grid(row=2, column=3, **pad, sticky="w")
+
+        ttk.Label(parent, text="Delay (min):").grid(row=2, column=4, **pad, sticky="e")
+        self._pump_delay_min = tk.DoubleVar(value=0.0)
+        ttk.Entry(parent, width=10, textvariable=self._pump_delay_min).grid(row=2, column=5, **pad, sticky="w")
+
+        ttk.Label(parent, text="Wait (sec):").grid(row=2, column=6, **pad, sticky="e")
+        self._wait_seconds = tk.DoubleVar(value=10.0)
+        ttk.Entry(parent, width=10, textvariable=self._wait_seconds).grid(row=2, column=7, **pad, sticky="w")
+
+        ttk.Label(parent, text="Raw cmd:").grid(row=3, column=0, **pad, sticky="e")
+        self._pump_raw_cmd = tk.StringVar(value="")
+        ttk.Entry(parent, width=60, textvariable=self._pump_raw_cmd).grid(
+            row=3, column=1, columnspan=7, **pad, sticky="w"
+        )
+
+        ttk.Label(parent, text="Alert message:").grid(row=4, column=0, **pad, sticky="e")
         self._alert_message = tk.StringVar(value="Check setup")
         ttk.Entry(parent, width=60, textvariable=self._alert_message).grid(
-            row=3, column=1, columnspan=7, **pad, sticky="w"
+            row=4, column=1, columnspan=7, **pad, sticky="w"
         )
 
         ttk.Label(
             parent,
             text="Tip: Only relevant fields are used based on action type.",
             foreground="#666",
-        ).grid(row=4, column=0, columnspan=8, padx=6, pady=(0, 6), sticky="w")
+        ).grid(row=5, column=0, columnspan=8, padx=6, pady=(0, 6), sticky="w")
 
     def _add_pump_step(self):
         action = self._pump_action.get().strip().upper()
@@ -888,6 +918,7 @@ class RecipeMakerTab:
     def _edit_pump_step(self, index: int):
         item = self._recipe[index]
         fields = self._extract_pump_fields(item)
+        from config import SYRINGE_PRESETS_MM
 
         win = tk.Toplevel(self._frame)
         win.title("Edit Pump Step")
@@ -937,9 +968,38 @@ class RecipeMakerTab:
             state="readonly",
         ).grid(row=0, column=5, **pad, sticky="w")
 
-        ttk.Label(win, text="Diameter (mm):").grid(row=0, column=6, **pad, sticky="e")
+        ttk.Label(win, text="Diameter (mm) (syringe ID):").grid(row=0, column=6, **pad, sticky="e")
         diameter_var = tk.DoubleVar(value=fields["diameter_mm"])
         ttk.Entry(win, width=10, textvariable=diameter_var).grid(row=0, column=7, **pad, sticky="w")
+
+        ttk.Label(win, text="Syringe preset:").grid(row=2, column=0, **pad, sticky="e")
+        syringe_var = tk.StringVar(value="Custom")
+        syringe_values = ["Custom"] + sorted(SYRINGE_PRESETS_MM.keys())
+        syringe_combo = ttk.Combobox(
+            win,
+            textvariable=syringe_var,
+            values=syringe_values,
+            width=22,
+            state="readonly",
+        )
+        syringe_combo.grid(row=2, column=1, columnspan=2, **pad, sticky="w")
+        ttk.Label(win, text="Tip: Diameter = syringe inner diameter (ID).", foreground="#666").grid(
+            row=2, column=3, columnspan=5, padx=6, pady=4, sticky="w"
+        )
+
+        def _apply_preset(_e=None):
+            key = (syringe_var.get() or "").strip()
+            if not key or key == "Custom":
+                return
+            mm = SYRINGE_PRESETS_MM.get(key)
+            if mm is None:
+                return
+            try:
+                diameter_var.set(float(mm))
+            except Exception:
+                pass
+
+        syringe_combo.bind("<<ComboboxSelected>>", _apply_preset)
 
         ttk.Label(win, text="Rate:").grid(row=1, column=0, **pad, sticky="e")
         rate_var = tk.DoubleVar(value=fields["rate"])
@@ -957,16 +1017,16 @@ class RecipeMakerTab:
         wait_var = tk.DoubleVar(value=fields["wait"])
         ttk.Entry(win, width=10, textvariable=wait_var).grid(row=1, column=7, **pad, sticky="w")
 
-        ttk.Label(win, text="Raw cmd:").grid(row=2, column=0, **pad, sticky="e")
+        ttk.Label(win, text="Raw cmd:").grid(row=3, column=0, **pad, sticky="e")
         cmd_var = tk.StringVar(value=fields["cmd"])
-        ttk.Entry(win, width=60, textvariable=cmd_var).grid(row=2, column=1, columnspan=7, **pad, sticky="w")
+        ttk.Entry(win, width=60, textvariable=cmd_var).grid(row=3, column=1, columnspan=7, **pad, sticky="w")
 
-        ttk.Label(win, text="Alert message:").grid(row=3, column=0, **pad, sticky="e")
+        ttk.Label(win, text="Alert message:").grid(row=4, column=0, **pad, sticky="e")
         alert_var = tk.StringVar(value=fields["alert"])
-        ttk.Entry(win, width=60, textvariable=alert_var).grid(row=3, column=1, columnspan=7, **pad, sticky="w")
+        ttk.Entry(win, width=60, textvariable=alert_var).grid(row=4, column=1, columnspan=7, **pad, sticky="w")
 
         btns = ttk.Frame(win)
-        btns.grid(row=4, column=0, columnspan=8, pady=(6, 8))
+        btns.grid(row=5, column=0, columnspan=8, pady=(6, 8))
 
         def _apply():
             try:

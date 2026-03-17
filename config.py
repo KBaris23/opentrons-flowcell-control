@@ -14,13 +14,25 @@ APP_VERSION = "1.0.0"
 # ── Pump hardware defaults ────────────────────────────────────────────────────
 
 # Chemyx Fusion pump defaults (serial, Basic Mode)
-CHEMYX_DEFAULT_PORT = "COM3"
-CHEMYX_DEFAULT_BAUD = 38400
+CHEMYX_DEFAULT_PORT = "COM5"
+CHEMYX_DEFAULT_BAUD = 9600
 CHEMYX_DEFAULT_EOL  = "cr"   # "cr", "lf", or "crlf"
 CHEMYX_DEFAULT_UNITS        = "uLmin"
 CHEMYX_DEFAULT_DIAMETER_MM  = 11.73
 CHEMYX_DEFAULT_RATE         = 1.0
 CHEMYX_DEFAULT_VOLUME       = 25.0
+
+# Common syringe inner diameters (ID) in mm.
+# These are typical values and can vary by manufacturer/model — verify your syringe datasheet.
+SYRINGE_PRESETS_MM: dict[str, float] = {
+    "1 mL (typical)": 4.7,
+    "3 mL (typical)": 8.7,
+    "5 mL (typical)": 12.1,
+    "10 mL (typical)": 14.5,
+    "20 mL (typical)": 19.1,
+    "30 mL (typical)": 21.6,
+    "50/60 mL (typical)": 26.6,
+}
 
 # ── File / folder paths ───────────────────────────────────────────────────────
 METHODS_DIR     = Path("methods")           # where .ms scripts are saved
