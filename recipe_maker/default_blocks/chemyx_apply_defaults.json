@@ -1,0 +1,21 @@
+{
+  "name": "Chemyx: Apply defaults",
+  "items": [
+    {
+      "type": "PUMP_APPLY",
+      "status": "pending",
+      "details": "Pump: apply parameters",
+      "pump_action": {
+        "name": "APPLY",
+        "params": {
+          "units": "uLmin",
+          "mode": "infuse",
+          "diameter_mm": 11.73,
+          "rate": 1.0,
+          "volume": 25.0
+        }
+      }
+    }
+  ]
+}
+

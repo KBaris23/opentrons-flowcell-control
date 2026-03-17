@@ -1,0 +1,23 @@
+{
+  "name": "Chemyx: HEXW2 infuse 25uL",
+  "items": [
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: run (hexw2 start)",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "infuse",
+          "diameter_mm": 11.73,
+          "volume": 25.0,
+          "rate": 1.0,
+          "delay_min": 0.0,
+          "start": true
+        }
+      }
+    }
+  ]
+}
+

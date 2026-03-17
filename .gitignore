@@ -1,0 +1,8 @@
+.venv/
+venv/
+venv_gui/
+__pycache__/
+*.pyc
+*.log
+measurement_data/
+.DS_Store

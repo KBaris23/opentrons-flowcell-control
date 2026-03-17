@@ -1,0 +1,101 @@
+﻿{
+  "metadata": {
+    "generated_at": "2026-03-16T00:00:00",
+    "version": 3,
+    "parameterized": true,
+    "template_syntax": "${var}",
+    "notes": [
+      "Reference-only templates: replace ${var} with UI-provided values.",
+      "Method entries should be resolved via methods/library_map.json using compute_hash(params).",
+      "Pump entries are Chemyx (Basic Mode) actions executed by the Queue tab."
+    ],
+    "source_examples": [
+      "recipe_maker/default_blocks/*.json",
+      "recipe_maker/saved_recipes/*.json"
+    ]
+  },
+  "items": [
+    {
+      "type": "PUMP_APPLY",
+      "status": "pending",
+      "details": "Pump: apply parameters",
+      "pump_action": {
+        "name": "APPLY",
+        "params": {
+          "units": "${pump_units}",
+          "mode": "${pump_mode}",
+          "diameter_mm": "${pump_diameter_mm}",
+          "rate": "${pump_rate}",
+          "volume": "${pump_volume}"
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: run hexw2 start",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "${pump_units}",
+          "mode": "${pump_mode}",
+          "diameter_mm": "${pump_diameter_mm}",
+          "volume": "${pump_volume}",
+          "rate": "${pump_rate}",
+          "delay_min": "${pump_delay_min}",
+          "start": true
+        }
+      }
+    },
+    {
+      "type": "PUMP_COMMAND",
+      "status": "pending",
+      "details": "Pump cmd: ${pump_cmd}",
+      "pump_action": {
+        "name": "COMMAND",
+        "params": {
+          "cmd": "${pump_cmd}"
+        }
+      }
+    },
+    {
+      "type": "PAUSE",
+      "status": "pending",
+      "details": "Pause for ${pause_seconds} sec",
+      "pause_seconds": "${pause_seconds}"
+    },
+    {
+      "type": "CV",
+      "status": "pending",
+      "details": "${method_name}",
+      "method_ref": {
+        "hash_key": "${method_hash}",
+        "technique": "CV",
+        "params": "${method_params}",
+        "mux_channel": "${method_mux_channel}"
+      }
+    },
+    {
+      "type": "CV",
+      "status": "pending",
+      "details": "${method_name}",
+      "method_ref": {
+        "hash_key": "${method_hash}",
+        "technique": "CV",
+        "params": "${method_params}",
+        "mux_channel": "${method_mux_channel}"
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "${method_name}",
+      "method_ref": {
+        "hash_key": "${method_hash}",
+        "technique": "SWV",
+        "params": "${method_params}",
+        "mux_channel": "${method_mux_channel}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Wait 10 seconds",
+  "items": [
+    {
+      "type": "PAUSE",
+      "status": "pending",
+      "details": "Pause for 10.0 sec",
+      "pause_seconds": 10.0
+    }
+  ]
+}
+
