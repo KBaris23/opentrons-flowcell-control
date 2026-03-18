@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
 from pathlib import Path
 from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk
 
-from config import OPENTRONS_DEFAULT_RUN_MODE, OPENTRONS_PROTOCOLS_DIR
+from config import (
+    OPENTRONS_DEFAULT_API_PORT,
+    OPENTRONS_DEFAULT_HOST,
+    OPENTRONS_DEFAULT_RUN_MODE,
+    OPENTRONS_PROTOCOLS_DIR,
+)
 from robot import OpentronsProtocolRunner, generate_protocol_source, summarize_protocol_spec
 from robot.opentrons_builder import spec_hash_params
 
@@ -19,6 +26,7 @@ class OpentronsTab:
     _MODE_LABELS = {
         "validate": "Validate Only",
         "simulate": "Simulate (SDK required)",
+        "robot": "Run on OT-2 (HTTP API)",
     }
 
     _STEP_KINDS = [
@@ -59,8 +67,8 @@ class OpentronsTab:
         container = ttk.Frame(self._frame)
         container.pack(fill="both", expand=True, padx=8, pady=8)
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(1, weight=1)
-        container.rowconfigure(2, weight=1)
+        container.rowconfigure(1, weight=3, minsize=260)
+        container.rowconfigure(2, weight=2, minsize=180)
 
         self._summary_frame(container)
 
@@ -159,7 +167,7 @@ class OpentronsTab:
         self._combo_mode = ttk.Combobox(
             top,
             textvariable=self._var_mode,
-            values=[self._mode_label("validate"), self._mode_label("simulate")],
+            values=[self._mode_label("validate"), self._mode_label("simulate"), self._mode_label("robot")],
             state="readonly",
         )
         self._combo_mode.grid(row=2, column=1, padx=4, pady=4, sticky="w")
@@ -170,8 +178,28 @@ class OpentronsTab:
             row=2, column=2, padx=4, pady=4, sticky="w"
         )
 
+        ttk.Label(top, text="Robot host/IP:").grid(row=3, column=0, padx=4, pady=4, sticky="e")
+        self._var_robot_host = tk.StringVar(value=str(OPENTRONS_DEFAULT_HOST))
+        ttk.Entry(top, textvariable=self._var_robot_host, width=24).grid(
+            row=3, column=1, padx=4, pady=4, sticky="w"
+        )
+        self._btn_ping = ttk.Button(top, text="Check Connectivity", command=self._check_robot_connectivity)
+        self._btn_ping.grid(
+            row=3, column=2, padx=4, pady=4, sticky="w"
+        )
+        self._var_ping_status = tk.StringVar(value="Connectivity: idle")
+        ttk.Label(top, textvariable=self._var_ping_status, foreground="#666").grid(
+            row=3, column=3, padx=4, pady=4, sticky="w"
+        )
+
+        ttk.Label(top, text="Robot API port:").grid(row=4, column=0, padx=4, pady=4, sticky="e")
+        self._var_robot_port = tk.StringVar(value=str(int(OPENTRONS_DEFAULT_API_PORT)))
+        ttk.Entry(top, textvariable=self._var_robot_port, width=10).grid(
+            row=4, column=1, padx=4, pady=4, sticky="w"
+        )
+
         btns = ttk.Frame(top)
-        btns.grid(row=3, column=0, columnspan=4, padx=4, pady=(6, 4), sticky="w")
+        btns.grid(row=5, column=0, columnspan=4, padx=4, pady=(6, 4), sticky="w")
         ttk.Button(btns, text="Inspect", command=self.inspect_current_file).pack(side="left", padx=4)
         ttk.Button(btns, text="Run Now", command=self.run_file_now).pack(side="left", padx=4)
         ttk.Button(btns, text="Add to Queue", command=self.add_file_to_queue).pack(side="left", padx=4)
@@ -203,7 +231,7 @@ class OpentronsTab:
         ttk.Combobox(
             meta,
             textvariable=self._builder_mode_var,
-            values=[self._mode_label("validate"), self._mode_label("simulate")],
+            values=[self._mode_label("validate"), self._mode_label("simulate"), self._mode_label("robot")],
             state="readonly",
         ).grid(row=0, column=5, padx=4, pady=4, sticky="ew")
 
@@ -428,6 +456,68 @@ class OpentronsTab:
         if path:
             self._var_path.set(path)
 
+    def _check_robot_connectivity(self) -> None:
+        host = (self._var_robot_host.get() or "").strip()
+        if not host:
+            messagebox.showwarning("Missing Host", "Enter the OT-2 hostname or IP address first.")
+            return
+
+        self._var_ping_status.set(f"Connectivity: checking {host} ...")
+        self._btn_ping.configure(state="disabled")
+        self.log(f"[Opentrons] Checking connectivity to {host} ...")
+
+        def _worker() -> None:
+            if sys.platform.startswith("win"):
+                cmd = ["ping", "-n", "1", "-w", "2000", host]
+            else:
+                cmd = ["ping", "-c", "1", "-W", "2", host]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    errors="replace",
+                    timeout=6,
+                    check=False,
+                )
+                output = (proc.stdout or proc.stderr or "").strip()
+                lines = [line.strip() for line in output.splitlines() if line.strip()]
+                snippet = " | ".join(lines[-2:]) if lines else "(no output)"
+                if proc.returncode == 0:
+                    self.log(f"[Opentrons] Connectivity OK: {host}")
+                    self.log(f"[Opentrons] ping: {snippet}")
+                    self._root.after(
+                        0,
+                        lambda: (
+                            self._var_ping_status.set(f"Connectivity: OK ({host})"),
+                            self._btn_ping.configure(state="normal"),
+                            messagebox.showinfo("Connectivity Check", f"Ping OK for {host}"),
+                        ),
+                    )
+                else:
+                    self.log(f"[Opentrons] Connectivity FAILED: {host}")
+                    self.log(f"[Opentrons] ping: {snippet}")
+                    self._root.after(
+                        0,
+                        lambda: (
+                            self._var_ping_status.set(f"Connectivity: FAILED ({host})"),
+                            self._btn_ping.configure(state="normal"),
+                            messagebox.showwarning("Connectivity Check", f"Ping failed for {host}"),
+                        ),
+                    )
+            except Exception as exc:
+                self.log(f"[Opentrons] Connectivity check error for {host}: {exc}")
+                self._root.after(
+                    0,
+                    lambda e=exc: (
+                        self._var_ping_status.set(f"Connectivity: error ({host})"),
+                        self._btn_ping.configure(state="normal"),
+                        messagebox.showerror("Connectivity Check", f"Error checking {host}:\n{e}"),
+                    ),
+                )
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _current_protocol_path(self) -> Path:
         raw = (self._var_path.get() or "").strip()
         if not raw:
@@ -473,6 +563,8 @@ class OpentronsTab:
             mode=mode,
             protocol_name=summary.protocol_name,
             protocol_path=str(path),
+            robot_host=self._robot_host(),
+            robot_port=self._robot_port(),
         )
 
     def _run_protocol_async(
@@ -483,6 +575,13 @@ class OpentronsTab:
         protocol_source: str | None = None,
         protocol_name: str | None = None,
     ) -> None:
+        robot_host = self._robot_host()
+        try:
+            robot_port = self._robot_port()
+        except Exception as exc:
+            messagebox.showerror("Run Failed", str(exc))
+            return
+
         def _worker() -> None:
             data_folder = None
             session_mgr = getattr(self._session, "session_manager", None)
@@ -494,6 +593,8 @@ class OpentronsTab:
                 protocol_name=protocol_name,
                 mode=mode,
                 data_folder=data_folder,
+                robot_host=robot_host,
+                robot_port=robot_port,
             )
             self._root.after(0, lambda: self._apply_summary(summary))
             self.log("[Opentrons] Run finished successfully." if ok else "[Opentrons] Run did not complete successfully.")
@@ -517,6 +618,8 @@ class OpentronsTab:
         protocol_name: str,
         protocol_path: str | None = None,
         protocol_source: str | None = None,
+        robot_host: str | None = None,
+        robot_port: int | None = None,
     ) -> None:
         params = {
             "mode": mode,
@@ -526,6 +629,10 @@ class OpentronsTab:
             params["protocol_path"] = protocol_path
         if protocol_source:
             params["protocol_source"] = protocol_source
+        if robot_host:
+            params["robot_host"] = robot_host
+        if robot_port is not None:
+            params["robot_port"] = int(robot_port)
         item = {
             "type": "OPENTRONS_PROTOCOL",
             "status": "pending",
@@ -739,6 +846,8 @@ class OpentronsTab:
             mode=mode,
             protocol_name=protocol_name,
             protocol_source=source,
+            robot_host=self._robot_host(),
+            robot_port=self._robot_port(),
         )
 
     def save_builder_to_library(self) -> None:
@@ -786,3 +895,15 @@ class OpentronsTab:
         if kind == "home":
             return "home robot"
         return str(step)
+
+    def _robot_host(self) -> str:
+        return (self._var_robot_host.get() or "").strip()
+
+    def _robot_port(self) -> int:
+        raw = (self._var_robot_port.get() or "").strip()
+        if not raw:
+            return int(OPENTRONS_DEFAULT_API_PORT)
+        port = int(raw)
+        if port <= 0 or port > 65535:
+            raise ValueError(f"Invalid OT-2 API port: {raw}")
+        return port

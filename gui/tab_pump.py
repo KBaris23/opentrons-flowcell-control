@@ -26,9 +26,10 @@ from config import (
 )
 
 try:
-    from pump import list_serial_ports
+    from pump import default_serial_port, ranked_serial_ports
 except Exception:
-    list_serial_ports = None  # type: ignore[assignment]
+    ranked_serial_ports = None  # type: ignore[assignment]
+    default_serial_port = None  # type: ignore[assignment]
 
 
 class PumpTab:
@@ -322,7 +323,7 @@ class PumpTab:
         if getattr(self._ctrl, "connected", False):
             return
         try:
-            ports = list_serial_ports() if callable(list_serial_ports) else []
+            ports = ranked_serial_ports() if callable(ranked_serial_ports) else []
         except Exception:
             ports = []
         if not ports:
@@ -331,6 +332,8 @@ class PumpTab:
                 self._on_sim_toggle()
             except Exception:
                 pass
+        elif not self._var_port.get().strip():
+            self._var_port.set(ports[0])
         self._threaded(self._do_autoconnect)
 
     # ---- Internals -----------------------------------------------------------
@@ -572,16 +575,25 @@ class PumpTab:
         threading.Thread(target=_poll, daemon=True).start()
 
     def _refresh_ports(self) -> None:
-        if list_serial_ports is None:
+        if ranked_serial_ports is None:
             ports: list[str] = []
         else:
             try:
-                ports = list_serial_ports()
+                ports = ranked_serial_ports()
             except Exception:
                 ports = []
+        prev = self._var_port.get().strip()
         self._port_combo.configure(values=ports)
-        if ports and not self._var_port.get().strip():
-            self._var_port.set(ports[0])
+        if not ports:
+            return
+        if prev and prev in ports:
+            return
+        if callable(default_serial_port):
+            picked = (default_serial_port() or "").strip()
+            if picked in ports:
+                self._var_port.set(picked)
+                return
+        self._var_port.set(ports[0])
 
     def _require_connected(self) -> None:
         if self._ctrl is None or not self._ctrl.connected:

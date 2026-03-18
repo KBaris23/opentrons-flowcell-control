@@ -14,7 +14,8 @@ APP_VERSION = "1.0.0"
 # ── Pump hardware defaults ────────────────────────────────────────────────────
 
 # Chemyx Fusion pump defaults (serial, Basic Mode)
-CHEMYX_DEFAULT_PORT = "COM5"
+# Leave blank to auto-select from detected serial ports at runtime.
+CHEMYX_DEFAULT_PORT = ""
 CHEMYX_DEFAULT_BAUD = 9600
 CHEMYX_DEFAULT_EOL  = "cr"   # "cr", "lf", or "crlf"
 CHEMYX_DEFAULT_UNITS        = "uLmin"
@@ -50,6 +51,8 @@ DEVICE_BAUDRATE = 230_400
 
 # Opentrons defaults
 OPENTRONS_DEFAULT_RUN_MODE = "validate"
+OPENTRONS_DEFAULT_HOST = "169.254.229.52"
+OPENTRONS_DEFAULT_API_PORT = 31950
 
 # ── GUI geometry ──────────────────────────────────────────────────────────────
 WINDOW_GEOMETRY = "1400x900"

@@ -11,6 +11,7 @@ import ast
 import importlib.util
 import shutil
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -111,6 +112,8 @@ class OpentronsProtocolRunner:
         protocol_name: str | None = None,
         mode: str = "validate",
         data_folder: Optional[Path] = None,
+        robot_host: str | None = None,
+        robot_port: int = 31950,
     ) -> tuple[bool, ProtocolSummary]:
         self._stop_event.clear()
         source, path, display_name = self._resolve_source(
@@ -147,6 +150,18 @@ class OpentronsProtocolRunner:
         if normalized_mode == "validate":
             self._log("[Opentrons] Validation complete (no robot execution requested).")
             return True, summary
+        if normalized_mode == "robot":
+            if not robot_host:
+                self._log("[Opentrons] Robot run mode requires robot_host.")
+                return False, summary
+            ok = self._run_on_robot(
+                source_path=summary.path,
+                source_text=source,
+                protocol_name=summary.protocol_name or protocol_name or Path(display_name).name,
+                robot_host=str(robot_host),
+                robot_port=int(robot_port),
+            )
+            return ok, summary
         if normalized_mode != "simulate":
             self._log(f"[Opentrons] Unsupported run mode: {mode}")
             return False, summary
@@ -170,6 +185,200 @@ class OpentronsProtocolRunner:
         except Exception as exc:
             self._log(f"[Opentrons] Simulation failed: {exc}")
             return False, summary
+
+    def _run_on_robot(
+        self,
+        *,
+        source_path: Path | None,
+        source_text: str,
+        protocol_name: str,
+        robot_host: str,
+        robot_port: int,
+    ) -> bool:
+        try:
+            import requests  # type: ignore[import-not-found]
+        except Exception as exc:
+            self._log(f"[Opentrons] Robot mode requires `requests`: {exc}")
+            return False
+
+        base_url = f"http://{robot_host}:{int(robot_port)}"
+        headers = {"Opentrons-Version": "2"}
+        self._log(f"[Opentrons] Robot mode target: {base_url}")
+
+        terminal_statuses = {"stopped", "idle", "succeeded", "failed"}
+        try:
+            runs_resp = requests.get(f"{base_url}/runs", headers=headers, timeout=15)
+            runs_resp.raise_for_status()
+            runs = (runs_resp.json() or {}).get("data", []) or []
+            for run in runs:
+                run_id = run.get("id")
+                run_status = str(run.get("status") or "").strip().lower()
+                if not run_id or run_status in terminal_statuses:
+                    continue
+                self._log(f"[Opentrons] Stopping existing active run {run_id} (status={run_status})")
+                try:
+                    stop_resp = requests.post(
+                        f"{base_url}/runs/{run_id}/actions",
+                        headers=headers,
+                        json={"data": {"actionType": "stop"}},
+                        timeout=15,
+                    )
+                    if stop_resp.status_code >= 400:
+                        self._log(f"[Opentrons] Warning: stop action failed for {run_id}: {stop_resp.text}")
+                except Exception as exc:
+                    self._log(f"[Opentrons] Warning: stop action error for {run_id}: {exc}")
+        except Exception as exc:
+            self._log(f"[Opentrons] Warning: could not inspect existing runs: {exc}")
+
+        if source_path is not None:
+            protocol_filename = source_path.name
+            with source_path.open("rb") as fh:
+                files = {"files": (protocol_filename, fh, "text/x-python")}
+                upload_resp = requests.post(
+                    f"{base_url}/protocols",
+                    headers=headers,
+                    files=files,
+                    timeout=60,
+                )
+        else:
+            protocol_filename = protocol_name if protocol_name.endswith(".py") else f"{protocol_name}.py"
+            files = {"files": (protocol_filename, source_text.encode("utf-8"), "text/x-python")}
+            upload_resp = requests.post(
+                f"{base_url}/protocols",
+                headers=headers,
+                files=files,
+                timeout=60,
+            )
+
+        if upload_resp.status_code >= 400:
+            self._log(f"[Opentrons] Protocol upload failed ({upload_resp.status_code}): {upload_resp.text}")
+            return False
+        upload_json = upload_resp.json() or {}
+        protocol_id = (upload_json.get("data") or {}).get("id")
+        if not protocol_id:
+            self._log(f"[Opentrons] Protocol upload response missing id: {upload_json}")
+            return False
+        self._log(f"[Opentrons] Protocol uploaded: id={protocol_id}")
+
+        create_run_resp = requests.post(
+            f"{base_url}/runs",
+            headers=headers,
+            json={"data": {"protocolId": protocol_id}},
+            timeout=30,
+        )
+        if create_run_resp.status_code >= 400:
+            self._log(f"[Opentrons] Create run failed ({create_run_resp.status_code}): {create_run_resp.text}")
+            return False
+        create_json = create_run_resp.json() or {}
+        run_id = (create_json.get("data") or {}).get("id")
+        if not run_id:
+            self._log(f"[Opentrons] Create run response missing id: {create_json}")
+            return False
+        self._log(f"[Opentrons] Run created: id={run_id}")
+
+        play_resp = requests.post(
+            f"{base_url}/runs/{run_id}/actions",
+            headers=headers,
+            json={"data": {"actionType": "play"}},
+            timeout=30,
+        )
+        if play_resp.status_code >= 400:
+            self._log(f"[Opentrons] Start run failed ({play_resp.status_code}): {play_resp.text}")
+            return False
+        self._log(f"[Opentrons] Run started: id={run_id}")
+
+        seen_command_ids: set[str] = set()
+        cursor: Optional[str] = None
+        last_status: Optional[str] = None
+        stop_sent = False
+        while True:
+            if self._stop_event.is_set() and not stop_sent:
+                stop_sent = True
+                self._log(f"[Opentrons] Stop requested: stopping run {run_id} ...")
+                try:
+                    stop_req = requests.post(
+                        f"{base_url}/runs/{run_id}/actions",
+                        headers=headers,
+                        json={"data": {"actionType": "stop"}},
+                        timeout=15,
+                    )
+                    if stop_req.status_code >= 400:
+                        self._log(f"[Opentrons] Warning: stop request failed ({stop_req.status_code}): {stop_req.text}")
+                except Exception as exc:
+                    self._log(f"[Opentrons] Warning: stop request error: {exc}")
+
+            cursor = self._log_robot_comments(
+                requests=requests,
+                base_url=base_url,
+                headers=headers,
+                run_id=str(run_id),
+                seen_command_ids=seen_command_ids,
+                cursor=cursor,
+            )
+
+            try:
+                status_resp = requests.get(f"{base_url}/runs/{run_id}", headers=headers, timeout=15)
+                status_resp.raise_for_status()
+                run_status = str((status_resp.json() or {}).get("data", {}).get("status") or "").strip().lower()
+            except Exception as exc:
+                self._log(f"[Opentrons] Failed to read run status: {exc}")
+                time.sleep(2.0)
+                continue
+
+            if run_status != last_status:
+                self._log(f"[Opentrons] Run status: {run_status}")
+                last_status = run_status
+
+            if run_status == "succeeded":
+                self._log("[Opentrons] Robot run completed successfully.")
+                return True
+            if run_status in {"failed", "stopped"}:
+                self._log(f"[Opentrons] Robot run ended with status: {run_status}")
+                return False
+
+            time.sleep(2.0)
+
+    def _log_robot_comments(
+        self,
+        *,
+        requests,
+        base_url: str,
+        headers: dict,
+        run_id: str,
+        seen_command_ids: set[str],
+        cursor: Optional[str],
+    ) -> Optional[str]:
+        params: dict = {"pageLength": 100}
+        if cursor is not None:
+            params["cursor"] = cursor
+        try:
+            commands_resp = requests.get(
+                f"{base_url}/runs/{run_id}/commands",
+                headers=headers,
+                params=params,
+                timeout=15,
+            )
+            commands_resp.raise_for_status()
+            payload = commands_resp.json() or {}
+        except Exception as exc:
+            self._log(f"[Opentrons] Warning: could not fetch run commands: {exc}")
+            return cursor
+
+        for command in payload.get("data", []) or []:
+            cmd_id = str(command.get("id") or "").strip()
+            if not cmd_id or cmd_id in seen_command_ids:
+                continue
+            seen_command_ids.add(cmd_id)
+
+            if str(command.get("commandType") or "").strip().lower() != "comment":
+                continue
+            message = str((command.get("params") or {}).get("message") or "").strip()
+            cmd_status = str(command.get("status") or "").strip().lower()
+            if message:
+                self._log(f"[Opentrons][COMMENT][{cmd_status or '?'}] {message}")
+
+        next_cursor = (payload.get("meta") or {}).get("cursor")
+        return str(next_cursor) if next_cursor is not None else None
 
     @staticmethod
     def _extract_literal_dict(tree: ast.AST, name: str) -> dict:

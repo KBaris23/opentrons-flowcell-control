@@ -1261,6 +1261,13 @@ class QueueTab:
         protocol_source = params.get("protocol_source")
         protocol_name = str(params.get("protocol_name") or "").strip() or "inline protocol"
         mode = str(params.get("mode") or "validate").lower()
+        robot_host = str(params.get("robot_host") or "").strip() or None
+        robot_port_raw = params.get("robot_port")
+        try:
+            robot_port = int(robot_port_raw) if robot_port_raw is not None else 31950
+        except Exception:
+            self.log(f"Invalid Opentrons robot_port in queue item: {robot_port_raw}")
+            return False
 
         if not protocol_path and not protocol_source:
             self.log("Invalid Opentrons item: missing protocol_path/protocol_source.")
@@ -1285,6 +1292,8 @@ class QueueTab:
                 protocol_name=protocol_name,
                 mode=mode,
                 data_folder=data_folder,
+                robot_host=robot_host,
+                robot_port=robot_port,
             )
             return ok
         finally:

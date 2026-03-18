@@ -36,6 +36,28 @@ def list_serial_ports() -> list[str]:
         return []
 
 
+def ranked_serial_ports() -> list[str]:
+    """Return detected serial ports ranked for pump use.
+
+    Rules:
+    - Prefer non-COM1 ports by default (COM1 is often a legacy motherboard port).
+    - Keep COM1 as a valid fallback (never hard-ban).
+    """
+    ports = list_serial_ports()
+
+    def _sort_key(device: str) -> tuple[int, str]:
+        dev = str(device or "").strip().upper()
+        return (1 if dev == "COM1" else 0, dev)
+
+    return sorted(ports, key=_sort_key)
+
+
+def default_serial_port() -> str:
+    """Best-effort default serial port for UI prefill."""
+    ranked = ranked_serial_ports()
+    return ranked[0] if ranked else ""
+
+
 @dataclass(frozen=True)
 class ChemyxConnectionSettings:
     port: str
