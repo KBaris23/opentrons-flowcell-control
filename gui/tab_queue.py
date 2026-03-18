@@ -22,9 +22,11 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, simpledialog
 from typing import Optional
 
+from config import OPENTRONS_PROTOCOLS_DIR
 from core.runner import SerialMeasurementRunner
 from methods import library_map
 from core.session import SessionState
+from robot import OpentronsProtocolRunner
 
 
 class QueueTab:
@@ -474,6 +476,10 @@ class QueueTab:
             action = item.get("pump_action") or {}
             data["pump_action"] = {"name": action.get("name"),
                                    "params": dict(action.get("params") or {})}
+        elif t and t.startswith("OPENTRONS_"):
+            action = item.get("opentrons_action") or {}
+            data["opentrons_action"] = {"name": action.get("name"),
+                                        "params": dict(action.get("params") or {})}
         else:
             if "script_path" in item:
                 data["script_path"] = item["script_path"]
@@ -508,6 +514,25 @@ class QueueTab:
             item["pump_action"] = {"name": action["name"],
                                    "params": dict(action.get("params") or {})}
             item["details"] = details or f"Pump action {action['name']}"
+        elif t.startswith("OPENTRONS_"):
+            action = raw.get("opentrons_action") or {}
+            params = dict(action.get("params") or {})
+            protocol_path = params.get("protocol_path")
+            protocol_source = params.get("protocol_source")
+            if not action.get("name") or (not protocol_path and not protocol_source):
+                return None
+            mode = str(params.get("mode") or "validate").lower()
+            protocol_label = str(params.get("protocol_name") or "").strip()
+            if protocol_path:
+                resolved = self._resolve_opentrons_protocol_path(protocol_path)
+                if resolved is None:
+                    return None
+                params["protocol_path"] = str(resolved)
+                protocol_label = protocol_label or resolved.name
+            else:
+                protocol_label = protocol_label or "inline protocol"
+            item["opentrons_action"] = {"name": action["name"], "params": params}
+            item["details"] = details or f"Opentrons {mode.upper()} {protocol_label}"
         else:
             sp = raw.get("script_path")
             method_ref = raw.get("method_ref") or {}
@@ -609,6 +634,25 @@ class QueueTab:
                 item["method_ref"] = dict(raw.get("method_ref") or {})
             item["details"]     = item.get("details") or details or Path(sp).name
         return item
+
+    @staticmethod
+    def _resolve_opentrons_protocol_path(protocol_path: str | Path) -> Optional[Path]:
+        raw = Path(protocol_path).expanduser()
+        candidates: list[Path] = []
+        if raw.is_absolute():
+            candidates.append(raw)
+        else:
+            candidates.append(Path.cwd() / raw)
+            candidates.append(Path(OPENTRONS_PROTOCOLS_DIR) / raw)
+            candidates.append(Path(OPENTRONS_PROTOCOLS_DIR) / raw.name)
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve()
+            except Exception:
+                resolved = candidate
+            if resolved.exists():
+                return resolved
+        return None
 
     @staticmethod
     def _mux_channel_address(channel: int) -> int:
@@ -865,6 +909,13 @@ class QueueTab:
                 elif t.startswith("PUMP_"):
                     ok = self._exec_pump(item)
                     self._session.measurement_queue[i]["status"] = "completed" if ok else "failed"
+                    success = ok
+
+                elif t.startswith("OPENTRONS_"):
+                    ok = self._exec_opentrons(item)
+                    self._session.measurement_queue[i]["status"] = (
+                        "completed" if ok else ("stopped" if not self._session.is_running else "failed")
+                    )
                     success = ok
 
                 else:
@@ -1202,6 +1253,42 @@ class QueueTab:
             self.log(f"Unsupported pump action: {name}"); return False
         except Exception as exc:
             self.log(f"Pump action failed: {exc}"); return False
+
+    def _exec_opentrons(self, item: dict) -> bool:
+        action_info = item.get("opentrons_action") or {}
+        params = action_info.get("params") or {}
+        protocol_path = params.get("protocol_path")
+        protocol_source = params.get("protocol_source")
+        protocol_name = str(params.get("protocol_name") or "").strip() or "inline protocol"
+        mode = str(params.get("mode") or "validate").lower()
+
+        if not protocol_path and not protocol_source:
+            self.log("Invalid Opentrons item: missing protocol_path/protocol_source.")
+            return False
+
+        resolved = None
+        if protocol_path:
+            resolved = self._resolve_opentrons_protocol_path(protocol_path)
+            if resolved is None:
+                self.log(f"Opentrons protocol not found: {protocol_path}")
+                return False
+
+        session_mgr = getattr(self._session, "session_manager", None)
+        data_folder = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
+
+        runner = OpentronsProtocolRunner(log_callback=self.log)
+        self._session.current_stop_callback = runner.stop
+        try:
+            ok, _summary = runner.execute(
+                resolved,
+                source_text=str(protocol_source) if protocol_source else None,
+                protocol_name=protocol_name,
+                mode=mode,
+                data_folder=data_folder,
+            )
+            return ok
+        finally:
+            self._session.current_stop_callback = None
 
     def _log_pump_status(self, label: str, resp: str) -> None:
         text = (resp or "").strip()

@@ -17,9 +17,18 @@ Windows venv workflow:
 - You can send raw commands; any command starting with `clrf` is automatically preceded by `status port` (helps when the pump is paused).
 - Use "Simulate (no hardware)" in the pump tab to test pump actions without a connected device.
 
+## Opentrons integration
+
+- The app now includes an `Opentrons` tab for file-based OT-2 protocol inspection, queueing, optional simulation, and UI-built protocol generation.
+- Builder-generated protocols can be run immediately, queued without saving, or saved into the Opentrons protocol library.
+- PalmSens execution still stays on the existing MethodSCRIPT path; the experimental `pypalmsens` sample files are intentionally not part of runtime control.
+- Bundled protocol files live under `opentrons_protocols/`.
+- Opentrons simulation is optional and only works when the `opentrons` Python package is installed locally.
+
 ## Roadmap
 
-- Opentrons control integration will be added later (structure is intended to keep `pump/` separate from future robot control modules).
+- Add true robot execution beyond file validation/simulation once the target OT-2 deployment path is finalized.
+- Add coordinated parallel orchestration for PalmSens + Opentrons after device lifecycles, stop semantics, and experiment synchronization are promoted into a shared scheduler layer.
 
 ## Slack bot (optional)
 
@@ -46,5 +55,7 @@ For local machines you can optionally use ngrok:
 - `gui/` - Tkinter UI tabs
 - `core/` - session + measurement execution logic
 - `pump/` - Chemyx pump driver (`pump/chemyx.py`)
+- `robot/` - optional robot/protocol helpers (`robot/opentrons_runner.py`)
 - `methods/` - saved MethodSCRIPT library
+- `opentrons_protocols/` - curated OT-2 protocol files for the GUI
 - `recipe_maker/` - recipe blocks and saved recipes

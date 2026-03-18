@@ -38,12 +38,18 @@ SYRINGE_PRESETS_MM: dict[str, float] = {
 METHODS_DIR     = Path("methods")           # where .ms scripts are saved
 DATA_DIR        = Path(os.getenv("EA_DATA_DIR", "measurement_data"))  # where measurement CSVs land
 BLOCKS_DIR      = Path("recipe_maker") / "default_blocks"  # where block definitions are saved
+OPENTRONS_PROTOCOLS_DIR = Path("opentrons_protocols")      # bundled / curated OT-2 protocol files
+OPENTRONS_LIBRARY_DIR = OPENTRONS_PROTOCOLS_DIR / "library"
+OPENTRONS_LIBRARY_MAP_FILE = OPENTRONS_PROTOCOLS_DIR / "library_map.json"
 SAVE_DATED_METHOD_COPIES = False            # if True, also write methods/YYYY-MM-DD/*.ms working copies
 #keep in mind that methods are already double saved under library and the experiments where they are used
 
 # ── Serial device detection keywords ─────────────────────────────────────────
 DEVICE_KEYWORDS = ["ESPicoDev", "EmStat", "USB Serial Port", "FTDI"]
 DEVICE_BAUDRATE = 230_400
+
+# Opentrons defaults
+OPENTRONS_DEFAULT_RUN_MODE = "validate"
 
 # ── GUI geometry ──────────────────────────────────────────────────────────────
 WINDOW_GEOMETRY = "1400x900"

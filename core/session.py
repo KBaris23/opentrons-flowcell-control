@@ -18,6 +18,7 @@ from typing import Callable, Dict, List, Optional
 import matplotlib.pyplot as plt
 
 from .method_registry import MethodRegistry
+from .opentrons_registry import OpentronsRegistry
 from .runner import SerialMeasurementRunner
 
 
@@ -45,6 +46,7 @@ class SessionState:
         self.measurement_queue: List[dict] = []
         self.is_running  = False
         self.current_runner: Optional[SerialMeasurementRunner] = None
+        self.current_stop_callback: Optional[Callable[[], None]] = None
 
         # ── Queue status (for external status polling) ────────────────────────
         self._queue_status_lock = threading.Lock()
@@ -62,6 +64,7 @@ class SessionState:
 
         # ── Script registry (deduplication) ───────────────────────────────────
         self.registry = MethodRegistry(log_callback=log_callback)
+        self.opentrons_registry = OpentronsRegistry(log_callback=log_callback)
 
         # ── Queue clipboard (copy / paste) ────────────────────────────────────
         self.queue_clipboard: List[dict] = []
@@ -133,6 +136,11 @@ class SessionState:
         """Signal the active runner (if any) to stop."""
         if self.current_runner is not None:
             self.current_runner.stop()
+        if self.current_stop_callback is not None:
+            try:
+                self.current_stop_callback()
+            except Exception:
+                pass
 
     def update_queue_status(self, **updates):
         """Update queue status fields in a threadsafe way."""

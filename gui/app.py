@@ -38,6 +38,7 @@ from gui.session_bar import SessionBar
 from gui.tab_script  import ScriptTab
 from gui.tab_plotter import PlotterTab
 from gui.tab_method  import MethodTab
+from gui.tab_opentrons import OpentronsTab
 from gui.tab_queue   import QueueTab
 from gui.tab_pump    import PumpTab
 from gui.tab_recipe_maker import RecipeMakerTab
@@ -116,6 +117,7 @@ class ElectrochemGUI:
         # ── Tab frames ────────────────────────────────────────────────────────
         pump_frame    = ttk.Frame(self._nb)
         method_frame  = ttk.Frame(self._nb)
+        opentrons_frame = ttk.Frame(self._nb)
         script_frame  = ttk.Frame(self._nb)
         queue_frame   = ttk.Frame(self._nb)
         recipe_frame  = ttk.Frame(self._nb)
@@ -124,11 +126,19 @@ class ElectrochemGUI:
         if PUMP_AVAILABLE:
             self._nb.add(pump_frame,    text="Fluidics")
         self._nb.add(method_frame,  text="Methods")
+        self._nb.add(opentrons_frame, text="Opentrons")
         self._nb.add(script_frame,  text="Script")
         self._nb.add(queue_frame,   text="Run Queue")
         self._nb.add(recipe_frame,  text="Recipes")
         self._nb.add(plotter_frame, text="Plotter")
-        self._session_gated_tabs = [method_frame, script_frame, queue_frame, recipe_frame, plotter_frame]
+        self._session_gated_tabs = [
+            method_frame,
+            opentrons_frame,
+            script_frame,
+            queue_frame,
+            recipe_frame,
+            plotter_frame,
+        ]
         if PUMP_AVAILABLE:
             self._session_gated_tabs.insert(0, pump_frame)
 
@@ -152,6 +162,13 @@ class ElectrochemGUI:
         self._recipe_tab = RecipeMakerTab(
             parent_frame = recipe_frame,
             on_send_to_queue = self._queue_tab.add_item,
+        )
+
+        self._opentrons_tab = OpentronsTab(
+            parent_frame = opentrons_frame,
+            session      = self._session,
+            on_add_to_queue = self._queue_tab.add_item,
+            root         = self.root,
         )
         # Wire session callbacks now that queue tab (with its log widget) exists
         self._session._log    = self._session_mgr.log
