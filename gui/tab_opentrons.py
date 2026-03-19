@@ -67,13 +67,24 @@ class OpentronsTab:
         container = ttk.Frame(self._frame)
         container.pack(fill="both", expand=True, padx=8, pady=8)
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(1, weight=3, minsize=260)
-        container.rowconfigure(2, weight=2, minsize=180)
+        container.rowconfigure(1, weight=1, minsize=260)
 
         self._summary_frame(container)
 
-        notebook = ttk.Notebook(container)
-        notebook.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        body = ttk.Panedwindow(container, orient="vertical")
+        body.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+
+        top = ttk.Frame(body)
+        bottom = ttk.Frame(body)
+        top.columnconfigure(0, weight=1)
+        top.rowconfigure(0, weight=1)
+        bottom.columnconfigure(0, weight=1)
+        bottom.rowconfigure(0, weight=1)
+        body.add(top, weight=3)
+        body.add(bottom, weight=1)
+
+        notebook = ttk.Notebook(top)
+        notebook.grid(row=0, column=0, sticky="nsew")
 
         file_tab = ttk.Frame(notebook)
         builder_tab = ttk.Frame(notebook)
@@ -83,8 +94,8 @@ class OpentronsTab:
         self._build_file_tab(file_tab)
         self._build_builder_tab(builder_tab)
 
-        log_frame = ttk.LabelFrame(container, text="Log")
-        log_frame.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
+        log_frame = ttk.LabelFrame(bottom, text="Log")
+        log_frame.grid(row=0, column=0, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         self._log_text = tk.Text(log_frame, height=10, state="disabled")
@@ -96,7 +107,9 @@ class OpentronsTab:
     def _summary_frame(self, parent) -> None:
         summary = ttk.LabelFrame(parent, text="Protocol Summary")
         summary.grid(row=0, column=0, sticky="ew")
-        summary.columnconfigure(1, weight=1)
+        summary.columnconfigure(1, weight=3)
+        summary.columnconfigure(3, weight=1)
+        summary.columnconfigure(5, weight=1)
 
         self._summary_vars = {
             "name": tk.StringVar(value="-"),
@@ -106,22 +119,37 @@ class OpentronsTab:
             "description": tk.StringVar(value="-"),
             "warnings": tk.StringVar(value="-"),
         }
-        rows = [
-            ("Name:", "name"),
-            ("API level:", "api"),
-            ("Robot:", "robot"),
-            ("Author:", "author"),
-            ("Description:", "description"),
-            ("Warnings:", "warnings"),
+        compact_fields = [
+            (0, 0, "Name:", "name"),
+            (0, 2, "API:", "api"),
+            (0, 4, "Robot:", "robot"),
+            (1, 0, "Author:", "author"),
         ]
-        for idx, (label, key) in enumerate(rows):
-            ttk.Label(summary, text=label).grid(row=idx, column=0, padx=4, pady=2, sticky="ne")
-            ttk.Label(
-                summary,
-                textvariable=self._summary_vars[key],
-                wraplength=900,
-                justify="left",
-            ).grid(row=idx, column=1, padx=4, pady=2, sticky="w")
+        for row, col, label, key in compact_fields:
+            ttk.Label(summary, text=label).grid(row=row, column=col, padx=4, pady=2, sticky="e")
+            ttk.Label(summary, textvariable=self._summary_vars[key], justify="left").grid(
+                row=row,
+                column=col + 1,
+                padx=(0, 8),
+                pady=2,
+                sticky="w",
+            )
+
+        ttk.Label(summary, text="Description:").grid(row=2, column=0, padx=4, pady=2, sticky="ne")
+        ttk.Label(
+            summary,
+            textvariable=self._summary_vars["description"],
+            wraplength=700,
+            justify="left",
+        ).grid(row=2, column=1, columnspan=5, padx=(0, 8), pady=2, sticky="w")
+
+        ttk.Label(summary, text="Warnings:").grid(row=3, column=0, padx=4, pady=2, sticky="ne")
+        ttk.Label(
+            summary,
+            textvariable=self._summary_vars["warnings"],
+            wraplength=700,
+            justify="left",
+        ).grid(row=3, column=1, columnspan=5, padx=(0, 8), pady=(2, 4), sticky="w")
 
     def _build_file_tab(self, parent) -> None:
         parent.columnconfigure(0, weight=1)
@@ -268,7 +296,7 @@ class OpentronsTab:
         for frame in (left, right):
             frame.columnconfigure(0, weight=1)
         left.rowconfigure(1, weight=1)
-        right.rowconfigure(2, weight=1)
+        right.rowconfigure(1, weight=1)
         body.add(left, weight=1)
         body.add(right, weight=2)
 
@@ -354,18 +382,29 @@ class OpentronsTab:
         ttk.Button(step_btns, text="Delete Step", command=self._delete_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Clear Steps", command=self._clear_steps).pack(side="left", padx=2)
 
+        middle = ttk.Panedwindow(parent, orient="vertical")
+        middle.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+
+        tree_frame = ttk.Frame(middle)
+        tree_frame.columnconfigure(0, weight=1)
+        tree_frame.rowconfigure(0, weight=1)
+        preview_frame = ttk.LabelFrame(middle, text="Generated Protocol Preview")
+        preview_frame.columnconfigure(0, weight=1)
+        preview_frame.rowconfigure(0, weight=1)
+        middle.add(tree_frame, weight=2)
+        middle.add(preview_frame, weight=3)
+
         cols = ("#", "Kind", "Details")
-        self._step_tree = ttk.Treeview(parent, columns=cols, show="headings", height=8)
+        self._step_tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=8)
         for col, width in (("#", 50), ("Kind", 120), ("Details", 520)):
             self._step_tree.heading(col, text=col)
             self._step_tree.column(col, width=width)
-        self._step_tree.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+        self._step_tree.grid(row=0, column=0, sticky="nsew")
+        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self._step_tree.yview)
+        tree_scroll.grid(row=0, column=1, sticky="ns", padx=(4, 0))
+        self._step_tree.configure(yscrollcommand=tree_scroll.set)
         self._step_tree.bind("<<TreeviewSelect>>", self._on_step_selected)
 
-        preview_frame = ttk.LabelFrame(parent, text="Generated Protocol Preview")
-        preview_frame.grid(row=2, column=0, sticky="nsew", pady=(6, 0))
-        preview_frame.columnconfigure(0, weight=1)
-        preview_frame.rowconfigure(0, weight=1)
         self._preview_text = tk.Text(preview_frame, height=14, state="disabled")
         self._preview_text.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=6)
         scroll = ttk.Scrollbar(preview_frame, orient="vertical", command=self._preview_text.yview)
@@ -373,7 +412,7 @@ class OpentronsTab:
         self._preview_text.configure(yscrollcommand=scroll.set)
 
         action_btns = ttk.Frame(parent)
-        action_btns.grid(row=3, column=0, sticky="w", pady=(6, 0))
+        action_btns.grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Button(action_btns, text="Preview", command=self.preview_builder_protocol).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Run Now", command=self.run_builder_now).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
