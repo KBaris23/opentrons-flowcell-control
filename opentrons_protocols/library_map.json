@@ -1,0 +1,68 @@
+{
+  "generated_ui_protocol_3e8854": {
+    "kind": "generated_ui_protocol",
+    "params": {
+      "labware": [
+        {
+          "alias": "tips",
+          "load_name": "opentrons_96_filtertiprack_20ul",
+          "slot": "4"
+        },
+        {
+          "alias": "source",
+          "load_name": "opentrons_24_tuberack_nest_2ml_snapcap",
+          "slot": "6"
+        },
+        {
+          "alias": "dest",
+          "load_name": "opentrons_24_tuberack_nest_2ml_snapcap",
+          "slot": "7"
+        }
+      ],
+      "metadata": {
+        "api_level": "2.19",
+        "author": "Opentrons Flowcell Console",
+        "description": "Generated from the UI builder.",
+        "protocol_name": "Generated Protocol",
+        "robot_type": "OT-2"
+      },
+      "pipette": {
+        "model": "p20_single_gen2",
+        "mount": "left",
+        "tiprack_alias": "tips"
+      },
+      "steps": [
+        {
+          "dest_alias": "dest",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "new_tip": "once",
+          "source_alias": "source",
+          "source_well": "A1",
+          "volume_ul": 1.0
+        },
+        {
+          "dest_alias": "dest",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "new_tip": "once",
+          "source_alias": "source",
+          "source_well": "A1",
+          "volume_ul": 1.0
+        },
+        {
+          "dest_alias": "dest",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "new_tip": "once",
+          "source_alias": "source",
+          "source_well": "A1",
+          "volume_ul": 1.0
+        }
+      ]
+    },
+    "note": "Generated Protocol",
+    "added_at": "2026-03-19T14:54:38",
+    "filepath": "opentrons_protocols\\library\\generated_ui_protocol_3e8854.py"
+  }
+}
