@@ -11,13 +11,15 @@ This tab does not execute; it only composes recipe items for later use.
 
 import copy
 import json
+import hashlib
 from pathlib import Path
 from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk, simpledialog
 
 from methods import library_map
-from config import BLOCKS_DIR
+from config import BLOCKS_DIR, OPENTRONS_PROTOCOLS_DIR
+from robot import OpentronsProtocolRunner
 
 
 class RecipeMakerTab:
@@ -30,6 +32,8 @@ class RecipeMakerTab:
         self._clipboard: list = []
         self._method_entries: dict = {}
         self._method_iid_to_key: dict = {}
+        self._opentrons_runner = OpentronsProtocolRunner(log_callback=lambda _msg: None)
+        self._opentrons_protocol_map: dict[str, Path] = {}
         self._last_selected = None
         self._style = ttk.Style(self._frame)
         self._repo_root = Path(__file__).resolve().parents[1]
@@ -145,13 +149,16 @@ class RecipeMakerTab:
 
         pump_tab = ttk.Frame(bottom_nb)
         method_tab = ttk.Frame(bottom_nb)
+        opentrons_tab = ttk.Frame(bottom_nb)
         block_tab = ttk.Frame(bottom_nb)
         bottom_nb.add(pump_tab, text="Pump Steps")
         bottom_nb.add(method_tab, text="Method Library")
+        bottom_nb.add(opentrons_tab, text="Opentrons")
         bottom_nb.add(block_tab, text="Blocks")
 
         self._build_pump_editor(pump_tab)
         self._build_method_library(method_tab)
+        self._build_opentrons_library(opentrons_tab)
         self._build_blocks_library(block_tab)
 
     def _legend_chip(self, parent, color: str, text: str):
@@ -400,6 +407,181 @@ class RecipeMakerTab:
             foreground="#666",
         )
         hint.pack(side="bottom", anchor="w", padx=8, pady=(0, 6))
+
+    def _build_opentrons_library(self, parent):
+        pad = {"padx": 6, "pady": 4}
+
+        top = ttk.Frame(parent)
+        top.pack(fill="x", padx=6, pady=6)
+
+        ttk.Label(top, text="Protocol:").pack(side="left")
+        self._opentrons_protocol_var = tk.StringVar()
+        self._opentrons_combo = ttk.Combobox(
+            top,
+            textvariable=self._opentrons_protocol_var,
+            state="readonly",
+            width=48,
+        )
+        self._opentrons_combo.pack(side="left", padx=6, fill="x", expand=True)
+        self._opentrons_combo.bind("<<ComboboxSelected>>", self._on_opentrons_selected)
+        ttk.Button(top, text="Refresh", command=self._load_opentrons_protocols).pack(side="left", padx=4)
+        ttk.Button(top, text="Browse", command=self._browse_opentrons_protocol).pack(side="left", padx=4)
+
+        form = ttk.Frame(parent)
+        form.pack(fill="x", padx=6, pady=(0, 6))
+
+        ttk.Label(form, text="Path:").grid(row=0, column=0, **pad, sticky="e")
+        self._opentrons_path_var = tk.StringVar()
+        ttk.Entry(form, textvariable=self._opentrons_path_var, width=80).grid(
+            row=0, column=1, columnspan=4, **pad, sticky="ew"
+        )
+        form.columnconfigure(1, weight=1)
+
+        ttk.Label(form, text="Run mode:").grid(row=1, column=0, **pad, sticky="e")
+        self._opentrons_mode_var = tk.StringVar(value="robot")
+        ttk.Combobox(
+            form,
+            textvariable=self._opentrons_mode_var,
+            values=["validate", "simulate", "robot"],
+            state="readonly",
+            width=12,
+        ).grid(row=1, column=1, **pad, sticky="w")
+
+        ttk.Label(form, text="Protocol name:").grid(row=1, column=2, **pad, sticky="e")
+        self._opentrons_name_var = tk.StringVar(value="")
+        ttk.Entry(form, textvariable=self._opentrons_name_var, width=30).grid(row=1, column=3, **pad, sticky="w")
+
+        btns = ttk.Frame(parent)
+        btns.pack(fill="x", padx=6, pady=(0, 6))
+        ttk.Button(btns, text="Add Protocol Step", command=self._add_opentrons_protocol_step).pack(side="left", padx=4)
+        ttk.Button(btns, text="Add Resume Step", command=self._add_opentrons_resume_step).pack(side="left", padx=4)
+
+        hint = ttk.Label(
+            parent,
+            text=(
+                "Use this for existing pause-capable Opentrons scripts. Add the protocol step first, "
+                "then place a matching resume step later in the recipe."
+            ),
+            foreground="#666",
+        )
+        hint.pack(side="bottom", anchor="w", padx=8, pady=(0, 6))
+
+        self._load_opentrons_protocols()
+
+    def _load_opentrons_protocols(self):
+        proto_dir = Path(OPENTRONS_PROTOCOLS_DIR)
+        proto_dir.mkdir(parents=True, exist_ok=True)
+        files = sorted(path.resolve() for path in proto_dir.rglob("*.py") if path.name != "__init__.py")
+        self._opentrons_protocol_map.clear()
+        labels = []
+        for path in files:
+            try:
+                label = str(path.relative_to(proto_dir))
+            except ValueError:
+                label = path.name
+            labels.append(label)
+            self._opentrons_protocol_map[label] = path
+        self._opentrons_combo.configure(values=labels)
+        if labels and self._opentrons_protocol_var.get() not in self._opentrons_protocol_map:
+            self._opentrons_protocol_var.set(labels[0])
+            self._on_opentrons_selected()
+
+    def _on_opentrons_selected(self, _event=None):
+        path = self._opentrons_protocol_map.get((self._opentrons_protocol_var.get() or "").strip())
+        if path is None:
+            return
+        self._set_opentrons_path(path)
+
+    def _browse_opentrons_protocol(self):
+        path = filedialog.askopenfilename(
+            title="Select Opentrons protocol",
+            filetypes=(("Python files", "*.py"), ("All files", "*.*")),
+            initialdir=str(Path(OPENTRONS_PROTOCOLS_DIR)),
+        )
+        if path:
+            self._set_opentrons_path(Path(path).resolve())
+
+    def _set_opentrons_path(self, path: Path):
+        self._opentrons_path_var.set(str(path))
+        try:
+            summary = self._opentrons_runner.inspect_protocol(path)
+            self._opentrons_name_var.set(summary.protocol_name or path.stem)
+        except Exception:
+            self._opentrons_name_var.set(path.stem)
+
+    def _current_opentrons_protocol(self) -> tuple[Path, str, str]:
+        raw = (self._opentrons_path_var.get() or "").strip()
+        if not raw:
+            raise ValueError("Select an Opentrons protocol first.")
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        path = path.resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Protocol file not found: {path}")
+        protocol_name = (self._opentrons_name_var.get() or "").strip()
+        if not protocol_name:
+            try:
+                protocol_name = self._opentrons_runner.inspect_protocol(path).protocol_name or path.stem
+            except Exception:
+                protocol_name = path.stem
+        source = path.read_text(encoding="utf-8")
+        return path, protocol_name, source
+
+    @staticmethod
+    def _opentrons_resume_key(protocol_name: str, source_text: str) -> str:
+        payload = f"{protocol_name}\n{source_text or ''}"
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+
+    def _add_opentrons_protocol_step(self):
+        try:
+            path, protocol_name, source = self._current_opentrons_protocol()
+            summary = self._opentrons_runner.inspect_protocol(path)
+        except Exception as exc:
+            messagebox.showerror("Invalid Protocol", str(exc))
+            return
+        mode = (self._opentrons_mode_var.get() or "robot").strip().lower()
+        details = f"Opentrons {mode.upper()} {path.name}"
+        if summary.has_pause:
+            details += " [pause-aware]"
+        item = {
+            "type": "OPENTRONS_PROTOCOL",
+            "status": "pending",
+            "details": details,
+            "opentrons_action": {
+                "name": "PROTOCOL",
+                "params": {
+                    "mode": mode,
+                    "protocol_name": protocol_name,
+                    "protocol_path": str(path),
+                    "resume_key": self._opentrons_resume_key(protocol_name, source),
+                    "supports_pause": bool(summary.has_pause),
+                },
+            },
+        }
+        self._recipe.append(item)
+        self._refresh()
+
+    def _add_opentrons_resume_step(self):
+        try:
+            _path, protocol_name, source = self._current_opentrons_protocol()
+        except Exception as exc:
+            messagebox.showerror("Invalid Protocol", str(exc))
+            return
+        item = {
+            "type": "OPENTRONS_RESUME",
+            "status": "pending",
+            "details": f"Opentrons RESUME {protocol_name}",
+            "opentrons_action": {
+                "name": "RESUME",
+                "params": {
+                    "protocol_name": protocol_name,
+                    "resume_key": self._opentrons_resume_key(protocol_name, source),
+                },
+            },
+        }
+        self._recipe.append(item)
+        self._refresh()
 
     def _load_method_map(self):
         self._method_entries = library_map.all_entries()

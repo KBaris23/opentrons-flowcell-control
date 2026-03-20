@@ -43,9 +43,21 @@ class ProtocolSummary:
     api_level: str = ""
     robot_type: str = ""
     has_run: bool = False
+    has_pause: bool = False
     metadata: dict = field(default_factory=dict)
     requirements: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ProtocolExecutionResult:
+    """Execution outcome for one protocol run or resume."""
+
+    ok: bool
+    summary: ProtocolSummary
+    state: str = "failed"
+    run_id: Optional[str] = None
+    protocol_id: Optional[str] = None
 
 
 class OpentronsProtocolRunner:
@@ -82,6 +94,14 @@ class OpentronsProtocolRunner:
             isinstance(node, ast.FunctionDef) and node.name == "run"
             for node in tree.body
         )
+        has_pause = any(
+            isinstance(node, ast.Call)
+            and (
+                (isinstance(node.func, ast.Attribute) and node.func.attr == "pause")
+                or (isinstance(node.func, ast.Name) and node.func.id == "pause")
+            )
+            for node in ast.walk(tree)
+        )
 
         warnings: list[str] = []
         if not metadata:
@@ -99,6 +119,7 @@ class OpentronsProtocolRunner:
             api_level=str(metadata.get("apiLevel") or ""),
             robot_type=str(requirements.get("robotType") or ""),
             has_run=has_run,
+            has_pause=has_pause,
             metadata=metadata,
             requirements=requirements,
             warnings=warnings,
@@ -115,6 +136,28 @@ class OpentronsProtocolRunner:
         robot_host: str | None = None,
         robot_port: int = 31950,
     ) -> tuple[bool, ProtocolSummary]:
+        result = self.execute_detailed(
+            protocol_path,
+            source_text=source_text,
+            protocol_name=protocol_name,
+            mode=mode,
+            data_folder=data_folder,
+            robot_host=robot_host,
+            robot_port=robot_port,
+        )
+        return result.ok, result.summary
+
+    def execute_detailed(
+        self,
+        protocol_path: str | Path | None = None,
+        *,
+        source_text: str | None = None,
+        protocol_name: str | None = None,
+        mode: str = "validate",
+        data_folder: Optional[Path] = None,
+        robot_host: str | None = None,
+        robot_port: int = 31950,
+    ) -> ProtocolExecutionResult:
         self._stop_event.clear()
         source, path, display_name = self._resolve_source(
             protocol_path=protocol_path,
@@ -137,7 +180,7 @@ class OpentronsProtocolRunner:
             self._log(f"[Opentrons] Warning: {warning}")
 
         if not summary.has_run:
-            return False, summary
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
 
         self._save_protocol_snapshot(
             source_path=summary.path,
@@ -149,28 +192,28 @@ class OpentronsProtocolRunner:
         normalized_mode = (mode or "validate").strip().lower()
         if normalized_mode == "validate":
             self._log("[Opentrons] Validation complete (no robot execution requested).")
-            return True, summary
+            return ProtocolExecutionResult(ok=True, summary=summary, state="completed")
         if normalized_mode == "robot":
             if not robot_host:
                 self._log("[Opentrons] Robot run mode requires robot_host.")
-                return False, summary
-            ok = self._run_on_robot(
+                return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
+            return self._run_on_robot(
+                summary=summary,
                 source_path=summary.path,
                 source_text=source,
                 protocol_name=summary.protocol_name or protocol_name or Path(display_name).name,
                 robot_host=str(robot_host),
                 robot_port=int(robot_port),
             )
-            return ok, summary
         if normalized_mode != "simulate":
             self._log(f"[Opentrons] Unsupported run mode: {mode}")
-            return False, summary
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
         if not self.sdk_available:
             self._log("[Opentrons] Simulation requested but the Opentrons SDK is not installed.")
-            return False, summary
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
         if self._stop_event.is_set():
             self._log("[Opentrons] Simulation stopped before start.")
-            return False, summary
+            return ProtocolExecutionResult(ok=False, summary=summary, state="stopped")
 
         try:
             module = self._load_module(path=summary.path, source_text=source, display_name=display_name)
@@ -181,25 +224,72 @@ class OpentronsProtocolRunner:
             run_fn(protocol)
             self._log("[Opentrons] Simulation completed.")
             self._log_protocol_commands(protocol)
-            return True, summary
+            return ProtocolExecutionResult(ok=True, summary=summary, state="completed")
         except Exception as exc:
             self._log(f"[Opentrons] Simulation failed: {exc}")
-            return False, summary
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
+
+    def resume_run(
+        self,
+        *,
+        protocol_name: str,
+        robot_host: str,
+        robot_port: int = 31950,
+        run_id: str,
+    ) -> ProtocolExecutionResult:
+        self._stop_event.clear()
+        summary = ProtocolSummary(
+            path=None,
+            protocol_name=protocol_name or "inline protocol",
+            warnings=[],
+        )
+        try:
+            import requests  # type: ignore[import-not-found]
+        except Exception as exc:
+            self._log(f"[Opentrons] Robot mode requires `requests`: {exc}")
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed", run_id=run_id)
+
+        base_url = f"http://{robot_host}:{int(robot_port)}"
+        headers = {"Opentrons-Version": "2"}
+        self._log(f"[Opentrons] Resuming run {run_id} on {base_url}")
+
+        try:
+            play_resp = requests.post(
+                f"{base_url}/runs/{run_id}/actions",
+                headers=headers,
+                json={"data": {"actionType": "play"}},
+                timeout=30,
+            )
+            if play_resp.status_code >= 400:
+                self._log(f"[Opentrons] Resume failed ({play_resp.status_code}): {play_resp.text}")
+                return ProtocolExecutionResult(ok=False, summary=summary, state="failed", run_id=run_id)
+        except Exception as exc:
+            self._log(f"[Opentrons] Resume request failed: {exc}")
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed", run_id=run_id)
+
+        return self._monitor_robot_run(
+            requests=requests,
+            base_url=base_url,
+            headers=headers,
+            run_id=run_id,
+            summary=summary,
+        )
 
     def _run_on_robot(
         self,
         *,
+        summary: ProtocolSummary,
         source_path: Path | None,
         source_text: str,
         protocol_name: str,
         robot_host: str,
         robot_port: int,
-    ) -> bool:
+    ) -> ProtocolExecutionResult:
         try:
             import requests  # type: ignore[import-not-found]
         except Exception as exc:
             self._log(f"[Opentrons] Robot mode requires `requests`: {exc}")
-            return False
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
 
         base_url = f"http://{robot_host}:{int(robot_port)}"
         headers = {"Opentrons-Version": "2"}
@@ -215,6 +305,12 @@ class OpentronsProtocolRunner:
                 run_status = str(run.get("status") or "").strip().lower()
                 if not run_id or run_status in terminal_statuses:
                     continue
+                if run_status == "paused":
+                    self._log(
+                        f"[Opentrons] Cannot start a new run while paused run {run_id} exists. "
+                        "Resume or stop the paused run first."
+                    )
+                    return ProtocolExecutionResult(ok=False, summary=summary, state="failed", run_id=str(run_id))
                 self._log(f"[Opentrons] Stopping existing active run {run_id} (status={run_status})")
                 try:
                     stop_resp = requests.post(
@@ -252,12 +348,12 @@ class OpentronsProtocolRunner:
 
         if upload_resp.status_code >= 400:
             self._log(f"[Opentrons] Protocol upload failed ({upload_resp.status_code}): {upload_resp.text}")
-            return False
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
         upload_json = upload_resp.json() or {}
         protocol_id = (upload_json.get("data") or {}).get("id")
         if not protocol_id:
             self._log(f"[Opentrons] Protocol upload response missing id: {upload_json}")
-            return False
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed")
         self._log(f"[Opentrons] Protocol uploaded: id={protocol_id}")
 
         create_run_resp = requests.post(
@@ -268,12 +364,12 @@ class OpentronsProtocolRunner:
         )
         if create_run_resp.status_code >= 400:
             self._log(f"[Opentrons] Create run failed ({create_run_resp.status_code}): {create_run_resp.text}")
-            return False
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed", protocol_id=str(protocol_id))
         create_json = create_run_resp.json() or {}
         run_id = (create_json.get("data") or {}).get("id")
         if not run_id:
             self._log(f"[Opentrons] Create run response missing id: {create_json}")
-            return False
+            return ProtocolExecutionResult(ok=False, summary=summary, state="failed", protocol_id=str(protocol_id))
         self._log(f"[Opentrons] Run created: id={run_id}")
 
         play_resp = requests.post(
@@ -284,8 +380,34 @@ class OpentronsProtocolRunner:
         )
         if play_resp.status_code >= 400:
             self._log(f"[Opentrons] Start run failed ({play_resp.status_code}): {play_resp.text}")
-            return False
+            return ProtocolExecutionResult(
+                ok=False,
+                summary=summary,
+                state="failed",
+                run_id=str(run_id),
+                protocol_id=str(protocol_id),
+            )
         self._log(f"[Opentrons] Run started: id={run_id}")
+
+        result = self._monitor_robot_run(
+            requests=requests,
+            base_url=base_url,
+            headers=headers,
+            run_id=str(run_id),
+            summary=summary,
+        )
+        result.protocol_id = str(protocol_id)
+        return result
+
+    def _monitor_robot_run(
+        self,
+        *,
+        requests,
+        base_url: str,
+        headers: dict,
+        run_id: str,
+        summary: ProtocolSummary,
+    ) -> ProtocolExecutionResult:
 
         seen_command_ids: set[str] = set()
         cursor: Optional[str] = None
@@ -331,10 +453,13 @@ class OpentronsProtocolRunner:
 
             if run_status == "succeeded":
                 self._log("[Opentrons] Robot run completed successfully.")
-                return True
+                return ProtocolExecutionResult(ok=True, summary=summary, state="completed", run_id=run_id)
+            if run_status == "paused":
+                self._log("[Opentrons] Robot run paused.")
+                return ProtocolExecutionResult(ok=True, summary=summary, state="paused", run_id=run_id)
             if run_status in {"failed", "stopped"}:
                 self._log(f"[Opentrons] Robot run ended with status: {run_status}")
-                return False
+                return ProtocolExecutionResult(ok=False, summary=summary, state=run_status, run_id=run_id)
 
             time.sleep(2.0)
 

@@ -60,6 +60,16 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
             cleaned["location"] = str(step.get("location", "top")).strip().lower() or "top"
         if kind == "delay":
             cleaned["seconds"] = float(step.get("seconds", 0))
+        if kind == "comment":
+            comment = str(step.get("comment", "")).strip()
+            if not comment:
+                raise ValueError(f"Step {idx} comment cannot be empty.")
+            cleaned["comment"] = comment
+        if kind == "pause":
+            message = str(step.get("message", "")).strip()
+            if not message:
+                raise ValueError(f"Step {idx} pause message cannot be empty.")
+            cleaned["message"] = message
         if kind in {"pick_up_tip", "drop_tip"}:
             cleaned["source_alias"] = normalize_identifier(
                 step.get("source_alias", tiprack_alias),
@@ -171,6 +181,10 @@ def generate_protocol_source(raw_spec: dict[str, Any]) -> tuple[str, dict[str, A
             lines.append(f"    pipette.blow_out({src}[{step['source_well']!r}])")
         elif kind == "delay":
             lines.append(f"    protocol.delay(seconds={step['seconds']:g})")
+        elif kind == "comment":
+            lines.append(f"    protocol.comment({step['comment']!r})")
+        elif kind == "pause":
+            lines.append(f"    protocol.pause({step['message']!r})")
         elif kind == "pick_up_tip":
             src = alias_map[step["source_alias"]]
             if step["source_well"]:

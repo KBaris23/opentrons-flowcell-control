@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import threading
+import hashlib
 from pathlib import Path
 from tkinter import filedialog, messagebox
 import tkinter as tk
@@ -39,6 +40,8 @@ class OpentronsTab:
         "pick_up_tip",
         "drop_tip",
         "home",
+        "comment",
+        "pause",
     ]
 
     def __init__(self, parent_frame, session, on_add_to_queue, root: tk.Tk):
@@ -231,6 +234,7 @@ class OpentronsTab:
         ttk.Button(btns, text="Inspect", command=self.inspect_current_file).pack(side="left", padx=4)
         ttk.Button(btns, text="Run Now", command=self.run_file_now).pack(side="left", padx=4)
         ttk.Button(btns, text="Add to Queue", command=self.add_file_to_queue).pack(side="left", padx=4)
+        ttk.Button(btns, text="Add Resume", command=self.add_file_resume_to_queue).pack(side="left", padx=4)
 
     def _build_builder_tab(self, parent) -> None:
         parent.columnconfigure(0, weight=1)
@@ -277,16 +281,16 @@ class OpentronsTab:
             state="readonly",
         ).grid(row=2, column=5, padx=4, pady=4, sticky="ew")
 
-        ttk.Label(meta, text="Mount:").grid(row=3, column=0, padx=4, pady=4, sticky="e")
+        ttk.Label(meta, text="Pipette side:").grid(row=3, column=4, padx=4, pady=4, sticky="e")
         ttk.Combobox(
             meta,
             textvariable=self._builder_mount,
             values=["left", "right"],
             state="readonly",
             width=10,
-        ).grid(row=3, column=1, padx=4, pady=4, sticky="w")
-        ttk.Label(meta, text="Tiprack alias:").grid(row=3, column=2, padx=4, pady=4, sticky="e")
-        ttk.Entry(meta, textvariable=self._builder_tiprack_alias, width=12).grid(row=3, column=3, padx=4, pady=4, sticky="w")
+        ).grid(row=3, column=5, padx=4, pady=4, sticky="ew")
+        ttk.Label(meta, text="Tiprack alias:").grid(row=3, column=0, padx=4, pady=4, sticky="e")
+        ttk.Entry(meta, textvariable=self._builder_tiprack_alias, width=12).grid(row=3, column=1, padx=4, pady=4, sticky="w")
 
         body = ttk.Panedwindow(parent, orient="horizontal")
         body.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
@@ -353,6 +357,7 @@ class OpentronsTab:
         self._step_location_var = tk.StringVar(value="top")
         self._step_new_tip_var = tk.StringVar(value="once")
         self._step_seconds_var = tk.StringVar(value="1")
+        self._step_comment_var = tk.StringVar(value="")
 
         fields = [
             ("Kind", self._step_kind_var, self._STEP_KINDS),
@@ -375,9 +380,18 @@ class OpentronsTab:
 
         ttk.Label(controls, text="Delay (s)").grid(row=2, column=0, padx=2, pady=2, sticky="w")
         ttk.Entry(controls, textvariable=self._step_seconds_var).grid(row=3, column=0, padx=2, pady=2, sticky="ew")
+        ttk.Label(controls, text="Text / Message").grid(row=2, column=1, padx=2, pady=2, sticky="w")
+        ttk.Entry(controls, textvariable=self._step_comment_var).grid(
+            row=3,
+            column=1,
+            columnspan=7,
+            padx=2,
+            pady=2,
+            sticky="ew",
+        )
 
         step_btns = ttk.Frame(controls)
-        step_btns.grid(row=3, column=1, columnspan=7, padx=2, pady=2, sticky="w")
+        step_btns.grid(row=4, column=0, columnspan=8, padx=2, pady=(4, 2), sticky="w")
         ttk.Button(step_btns, text="Add / Update Step", command=self._upsert_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Delete Step", command=self._delete_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Clear Steps", command=self._clear_steps).pack(side="left", padx=2)
@@ -416,6 +430,7 @@ class OpentronsTab:
         ttk.Button(action_btns, text="Preview", command=self.preview_builder_protocol).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Run Now", command=self.run_builder_now).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
 
     def _seed_builder_defaults(self) -> None:
@@ -597,13 +612,31 @@ class OpentronsTab:
         self._apply_summary(summary)
         mode = self._mode_key(self._var_mode.get())
         details = f"Opentrons {mode.upper()} {path.name}"
+        if summary.has_pause:
+            details += " [pause-aware]"
         self._queue_opentrons_item(
             details=details,
             mode=mode,
             protocol_name=summary.protocol_name,
             protocol_path=str(path),
+            supports_pause=summary.has_pause,
             robot_host=self._robot_host(),
             robot_port=self._robot_port(),
+        )
+
+    def add_file_resume_to_queue(self) -> None:
+        try:
+            path = self._current_protocol_path()
+            summary = self._runner.inspect_protocol(path)
+            source_text = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            messagebox.showerror("Queue Error", str(exc))
+            return
+        self._apply_summary(summary)
+        self._queue_opentrons_resume_item(
+            details=f"Opentrons RESUME {summary.protocol_name}",
+            protocol_name=summary.protocol_name,
+            resume_key=self._resume_key(protocol_name=summary.protocol_name, protocol_source=source_text),
         )
 
     def _run_protocol_async(
@@ -657,12 +690,20 @@ class OpentronsTab:
         protocol_name: str,
         protocol_path: str | None = None,
         protocol_source: str | None = None,
+        supports_pause: bool = False,
         robot_host: str | None = None,
         robot_port: int | None = None,
     ) -> None:
+        resume_key = self._resume_key(
+            protocol_name=protocol_name,
+            protocol_path=protocol_path,
+            protocol_source=protocol_source,
+        )
         params = {
             "mode": mode,
             "protocol_name": protocol_name,
+            "resume_key": resume_key,
+            "supports_pause": bool(supports_pause),
         }
         if protocol_path:
             params["protocol_path"] = protocol_path
@@ -686,6 +727,44 @@ class OpentronsTab:
             self.log(f"[Queue] Added: {details}")
         except Exception as exc:
             messagebox.showerror("Queue Error", str(exc))
+
+    def _queue_opentrons_resume_item(
+        self,
+        *,
+        details: str,
+        protocol_name: str,
+        resume_key: str,
+    ) -> None:
+        item = {
+            "type": "OPENTRONS_RESUME",
+            "status": "pending",
+            "details": details,
+            "opentrons_action": {
+                "name": "RESUME",
+                "params": {
+                    "protocol_name": protocol_name,
+                    "resume_key": resume_key,
+                },
+            },
+        }
+        try:
+            self._add_to_queue(item)
+            self.log(f"[Queue] Added: {details}")
+        except Exception as exc:
+            messagebox.showerror("Queue Error", str(exc))
+
+    @staticmethod
+    def _resume_key(
+        *,
+        protocol_name: str,
+        protocol_path: str | None = None,
+        protocol_source: str | None = None,
+    ) -> str:
+        source = protocol_source
+        if source is None and protocol_path:
+            source = Path(protocol_path).read_text(encoding="utf-8")
+        payload = f"{protocol_name}\n{source or ''}"
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
     def _refresh_labware_tree(self) -> None:
         for row in self._labware_tree.get_children():
@@ -762,6 +841,7 @@ class OpentronsTab:
         self._step_location_var.set(step.get("location", "top"))
         self._step_new_tip_var.set(step.get("new_tip", "once"))
         self._step_seconds_var.set(str(step.get("seconds", "")))
+        self._step_comment_var.set(step.get("comment", step.get("message", "")))
 
     def _current_step_from_form(self) -> dict:
         kind = (self._step_kind_var.get() or "").strip().lower()
@@ -780,6 +860,16 @@ class OpentronsTab:
             step["location"] = (self._step_location_var.get() or "top").strip().lower()
         if kind == "delay":
             step["seconds"] = float(self._step_seconds_var.get())
+        if kind == "comment":
+            comment = (self._step_comment_var.get() or "").strip()
+            if not comment:
+                raise ValueError("Comment text is required for comment steps.")
+            step["comment"] = comment
+        if kind == "pause":
+            message = (self._step_comment_var.get() or "").strip()
+            if not message:
+                raise ValueError("Pause message is required for pause steps.")
+            step["message"] = message
         return step
 
     def _upsert_step(self) -> None:
@@ -885,8 +975,22 @@ class OpentronsTab:
             mode=mode,
             protocol_name=protocol_name,
             protocol_source=source,
+            supports_pause=bool(getattr(self._runner.inspect_protocol(source_text=source, protocol_name=protocol_name), "has_pause", False)),
             robot_host=self._robot_host(),
             robot_port=self._robot_port(),
+        )
+
+    def add_builder_resume_to_queue(self) -> None:
+        try:
+            source, spec = self._generate_builder_protocol()
+        except Exception as exc:
+            messagebox.showerror("Build Failed", str(exc))
+            return
+        protocol_name = spec["metadata"]["protocol_name"]
+        self._queue_opentrons_resume_item(
+            details=f"Opentrons RESUME {protocol_name}",
+            protocol_name=protocol_name,
+            resume_key=self._resume_key(protocol_name=protocol_name, protocol_source=source),
         )
 
     def save_builder_to_library(self) -> None:
@@ -928,6 +1032,10 @@ class OpentronsTab:
             return f"at {step.get('source_alias')}:{step.get('source_well')}"
         if kind == "delay":
             return f"{step.get('seconds', 0):g} second(s)"
+        if kind == "comment":
+            return str(step.get("comment", "")).strip() or "(empty comment)"
+        if kind == "pause":
+            return f"pause: {str(step.get('message', '')).strip() or '(empty pause message)'}"
         if kind in {"pick_up_tip", "drop_tip"}:
             suffix = f" {step.get('source_alias')}:{step.get('source_well')}" if step.get("source_well") else ""
             return suffix.strip() or "default tip position"
