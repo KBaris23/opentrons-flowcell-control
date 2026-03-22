@@ -959,6 +959,7 @@ class QueueTab:
                             save_raw_packets=self._session.save_raw_packets,
                             simulate_measurements=self._session.simulate_measurements,
                             invert_current=(item.get("type") == "SWV"),
+                            preferred_port=self._session.device_port,
                         )
                         self._session.current_runner = runner
                         success, csv_path = runner.execute(meas_tag=meas_tag)

@@ -401,6 +401,7 @@ class ElectrochemGUI:
                 save_raw_packets = self._session.save_raw_packets,
                 simulate_measurements = self._session.simulate_measurements,
                 invert_current = (technique == "SWV"),
+                preferred_port = self._session.device_port,
             )
             self._session.current_runner = runner
             success, csv_path = runner.execute(meas_tag=meas_tag)
@@ -460,7 +461,8 @@ class ElectrochemGUI:
                     data_callback=self._plotter_tab.push_live_point,
                     save_raw_packets=self._session.save_raw_packets,
                     simulate_measurements=self._session.simulate_measurements,
-                    invert_current=(technique == "SWV"))
+                    invert_current=(technique == "SWV"),
+                    preferred_port=self._session.device_port)
                 self._session.current_runner = runner
                 ok, csv_path = runner.execute(meas_tag=meas_tag)
                 self._session.current_runner = None
@@ -516,7 +518,8 @@ class ElectrochemGUI:
                     data_callback=self._plotter_tab.push_live_point,
                     save_raw_packets=self._session.save_raw_packets,
                     simulate_measurements=self._session.simulate_measurements,
-                    invert_current=True)
+                    invert_current=True,
+                    preferred_port=self._session.device_port)
                 self._session.current_runner = runner
                 ok, csv_path = runner.execute(meas_tag=meas_tag)
                 self._session.current_runner = None
@@ -579,7 +582,8 @@ class ElectrochemGUI:
                         data_callback=self._plotter_tab.push_live_point,
                         save_raw_packets=self._session.save_raw_packets,
                         simulate_measurements=self._session.simulate_measurements,
-                        invert_current=True)
+                        invert_current=True,
+                        preferred_port=self._session.device_port)
                     self._session.current_runner = runner
                     ok, csv_path = runner.execute(meas_tag=meas_tag)
                     self._session.current_runner = None

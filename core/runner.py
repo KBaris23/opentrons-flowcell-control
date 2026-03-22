@@ -27,6 +27,20 @@ from .mscript_parser import parse_mscript_data_package
 from config import DATA_DIR, DEVICE_KEYWORDS, DEVICE_BAUDRATE
 
 
+def format_port_info(port) -> str:
+    """Return a compact, user-facing summary for a serial port."""
+    details = []
+    for attr in ("description", "manufacturer", "product"):
+        value = getattr(port, attr, None)
+        if value:
+            text = str(value).strip()
+            if text and text not in details:
+                details.append(text)
+    if details:
+        return f"{port.device}: {' | '.join(details)}"
+    return str(getattr(port, "device", "Unknown"))
+
+
 class SerialMeasurementRunner:
     """Run a single MethodSCRIPT measurement over a serial port.
 
@@ -63,6 +77,7 @@ class SerialMeasurementRunner:
         simulate_measurements: bool = False,
         invert_current: bool = False,
         pump_com_port=None,
+        preferred_port: Optional[str] = None,
     ):
         self.script_path    = Path(script_path)
         self.data_points    = []
@@ -77,6 +92,7 @@ class SerialMeasurementRunner:
         self.invert_current = bool(invert_current)
         self._raw_fh = None
         self._fallback_tag_counter = 0
+        self._preferred_port = str(preferred_port).strip() if preferred_port else None
 
         # Prepare per-day data folder
         if data_folder is not None:
@@ -94,6 +110,13 @@ class SerialMeasurementRunner:
     def find_device_port(self) -> Optional[str]:
         self.log("Scanning for devices...")
         ports = serial.tools.list_ports.comports(include_links=False)
+        if self._preferred_port:
+            for port in ports:
+                if str(getattr(port, "device", "")).strip().upper() == self._preferred_port.upper():
+                    self.log(f"Using selected device: {port.device}")
+                    return port.device
+            self.log(f"Selected device not found: {self._preferred_port}")
+
         candidates = []
         for port in ports:
             self.log(f"  Found port: {port.description} ({port.device})")
