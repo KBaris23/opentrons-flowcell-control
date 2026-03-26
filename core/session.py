@@ -19,7 +19,9 @@ import matplotlib.pyplot as plt
 
 from .method_registry import MethodRegistry
 from .opentrons_registry import OpentronsRegistry
+from .pump_step_utils import default_collection_warn_ml
 from .runner import SerialMeasurementRunner
+from config import COLLECTION_SYRINGE_CAPACITY_ML
 
 
 class SessionState:
@@ -85,6 +87,13 @@ class SessionState:
         self.step_delay: float = 1.0
         self.device_port: Optional[str] = None
 
+        # Syringe collection tracking (queue-run scoped)
+        self.collection_steps: int = 0
+        self.collection_volume_ul: float = 0.0
+        self.collection_capacity_ul: float = COLLECTION_SYRINGE_CAPACITY_ML * 1000.0
+        self.collection_warn_ul: float = default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML) * 1000.0
+        self.collection_warned: bool = False
+
     # ── Measurement tag ───────────────────────────────────────────────────────
 
     def next_meas_tag(self) -> str:
@@ -107,6 +116,38 @@ class SessionState:
         """Reset measurement counter to zero."""
         self.measurement_counter = 0
         self._log("[Session] Measurement counter reset to 0.")
+
+    def reset_collection_tracking(
+        self,
+        *,
+        capacity_ul: Optional[float] = None,
+        warn_ul: Optional[float] = None,
+    ) -> None:
+        self.collection_steps = 0
+        self.collection_volume_ul = 0.0
+        self.collection_capacity_ul = (
+            float(capacity_ul) if capacity_ul is not None else COLLECTION_SYRINGE_CAPACITY_ML * 1000.0
+        )
+        self.collection_warn_ul = (
+            float(warn_ul)
+            if warn_ul is not None
+            else default_collection_warn_ml(self.collection_capacity_ul / 1000.0) * 1000.0
+        )
+        self.collection_warned = False
+
+    def add_collection_volume(
+        self,
+        *,
+        volume_ul: float,
+        capacity_ul: Optional[float] = None,
+        warn_ul: Optional[float] = None,
+    ) -> None:
+        self.collection_steps += 1
+        self.collection_volume_ul += max(0.0, float(volume_ul))
+        if capacity_ul is not None and capacity_ul > 0:
+            self.collection_capacity_ul = float(capacity_ul)
+        if warn_ul is not None and warn_ul > 0:
+            self.collection_warn_ul = float(warn_ul)
 
     # ── Plot colour ───────────────────────────────────────────────────────────
 

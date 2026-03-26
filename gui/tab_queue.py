@@ -22,8 +22,22 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, simpledialog
 from typing import Optional
 
-from config import OPENTRONS_PROTOCOLS_DIR
+from config import (
+    OPENTRONS_PROTOCOLS_DIR,
+    COLLECTION_SYRINGE_CAPACITY_ML,
+    FLOWCELL_FILL_VOLUME_UL,
+    FLOWCELL_FILL_TARGET_S,
+    SYRINGE_PRESETS_MM,
+)
 from core.runner import SerialMeasurementRunner
+from core.pump_step_utils import (
+    build_pump_details,
+    default_collection_warn_ml,
+    estimate_eta_seconds,
+    format_ml_from_ul,
+    rate_for_target_eta,
+    volume_to_ul,
+)
 from methods import library_map
 from core.session import SessionState
 from robot import OpentronsProtocolRunner
@@ -117,9 +131,11 @@ class QueueTab:
         self._tree.bind("<B1-Motion>",       self._drag_motion)
         self._tree.bind("<ButtonRelease-1>", self._drag_release)
         self._tree.bind("<Shift-Button-1>",  self._select_range)
+        self._tree.bind("<Double-1>", self._on_tree_double_click)
 
         # Right-click context menu
         self._ctx = tk.Menu(self._tree, tearoff=0)
+        self._ctx.add_command(label="Edit", command=self._edit_selected)
         self._ctx.add_command(label="📋 Copy",        command=self.copy_selected)
         self._ctx.add_command(label="📌 Paste After", command=self.paste_after_selected)
         self._ctx.add_command(label="⧉ Duplicate",   command=self.duplicate_selected)
@@ -147,6 +163,9 @@ class QueueTab:
         self._lbl_registry = ttk.Label(info_bar, text="Script registry: 0 unique",
                                        foreground="#555")
         self._lbl_registry.pack(side="left", padx=8)
+        self._lbl_collection = ttk.Label(info_bar, text="Collection: 0 steps | 0.000 / 50.0 mL",
+                                         foreground="#555")
+        self._lbl_collection.pack(side="left", padx=8)
         ttk.Button(info_bar, text="Reset Counter",
                    command=self._reset_counter).pack(side="right", padx=4)
         ttk.Button(info_bar, text="Clear Registry",
@@ -208,6 +227,14 @@ class QueueTab:
             text=f"Measurements this session: {self._session.measurement_counter}")
         self._lbl_registry.config(
             text=f"Script registry: {self._session.registry.size} unique")
+        self._lbl_collection.config(
+            text=(
+                "Collection: "
+                f"{self._session.collection_steps} steps | "
+                f"{self._session.collection_volume_ul / 1000.0:.3f} / "
+                f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
+            )
+        )
 
 
     # ── Session info bar buttons ──────────────────────────────────────────────
@@ -344,6 +371,371 @@ class QueueTab:
         self.refresh()
         self.set_status("Queue cleared")
         self.log("Queue cleared.")
+
+    def _on_tree_double_click(self, event):
+        row = self._tree.identify_row(event.y)
+        if not row:
+            return
+        try:
+            idx = self._tree.index(row)
+        except Exception:
+            return
+        self._edit_queue_item(idx)
+
+    def _edit_selected(self):
+        if self._session.is_running:
+            messagebox.showwarning("Queue Running", "Stop before editing.")
+            return
+        idxs = self._selected_indices()
+        if len(idxs) != 1:
+            messagebox.showwarning("Select One", "Select a single queue item to edit.")
+            return
+        self._edit_queue_item(idxs[0])
+
+    @staticmethod
+    def _is_editable_item(item: dict) -> bool:
+        item_type = str(item.get("type") or "").upper()
+        return item_type.startswith("PUMP_") or item_type in {"PAUSE", "ALERT"}
+
+    @staticmethod
+    def _extract_edit_fields(item: dict) -> dict:
+        item_type = str(item.get("type") or "").upper()
+        if item_type == "PAUSE":
+            return {
+                "action": "WAIT",
+                "units": "uLmin",
+                "mode": "infuse",
+                "diameter_mm": 11.73,
+                "rate": 1.0,
+                "volume": 25.0,
+                "delay_min": 0.0,
+                "cmd": "",
+                "wait": float(item.get("pause_seconds", 10.0)),
+                "alert": "Check setup",
+                "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
+                "track_collection": False,
+                "collection_capacity_ml": float(COLLECTION_SYRINGE_CAPACITY_ML),
+                "collection_warn_ml": float(default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML)),
+            }
+        if item_type == "ALERT":
+            return {
+                "action": "ALERT",
+                "units": "uLmin",
+                "mode": "infuse",
+                "diameter_mm": 11.73,
+                "rate": 1.0,
+                "volume": 25.0,
+                "delay_min": 0.0,
+                "cmd": "",
+                "wait": 10.0,
+                "alert": str(item.get("alert_message") or ""),
+                "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
+                "track_collection": False,
+                "collection_capacity_ml": float(COLLECTION_SYRINGE_CAPACITY_ML),
+                "collection_warn_ml": float(default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML)),
+            }
+
+        action_info = item.get("pump_action") or {}
+        params = dict(action_info.get("params") or {})
+        action = str(action_info.get("name") or item_type.replace("PUMP_", "")).upper()
+        return {
+            "action": action,
+            "units": str(params.get("units", "uLmin")),
+            "mode": str(params.get("mode", "infuse")),
+            "diameter_mm": float(params.get("diameter_mm", 11.73)),
+            "rate": float(params.get("rate", 1.0)),
+            "volume": float(params.get("volume", 25.0)),
+            "delay_min": float(params.get("delay_min", 0.0)),
+            "cmd": str(params.get("cmd", "")),
+            "wait": 10.0,
+            "alert": "Check setup",
+            "target_eta_s": float(params.get("target_eta_s", FLOWCELL_FILL_TARGET_S)),
+            "track_collection": bool(params.get("track_collection", False)),
+            "collection_capacity_ml": float(params.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)),
+            "collection_warn_ml": float(params.get("collection_warn_ml", default_collection_warn_ml(params.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)))),
+        }
+
+    @staticmethod
+    def _build_edited_queue_item(fields: dict) -> dict:
+        action = str(fields.get("action") or "").strip().upper()
+        if not action:
+            raise ValueError("Pump action is required.")
+
+        if action == "WAIT":
+            seconds = float(fields.get("wait", 0.0))
+            return {
+                "type": "PAUSE",
+                "status": "pending",
+                "details": f"Pause for {seconds:.1f} sec",
+                "pause_seconds": seconds,
+            }
+        if action == "ALERT":
+            msg = str(fields.get("alert") or "").strip()
+            if not msg:
+                raise ValueError("Alert message cannot be empty.")
+            return {
+                "type": "ALERT",
+                "status": "pending",
+                "details": f"Alert: {msg}",
+                "alert_message": msg,
+            }
+
+        params: dict = {}
+        if action == "COMMAND":
+            cmd = str(fields.get("cmd") or "").strip()
+            if not cmd:
+                raise ValueError("Raw cmd cannot be empty for COMMAND action.")
+            params = {"cmd": cmd}
+        elif action == "APPLY":
+            params = {
+                "units": str(fields.get("units")),
+                "mode": str(fields.get("mode")),
+                "diameter_mm": float(fields.get("diameter_mm")),
+                "rate": float(fields.get("rate")),
+                "volume": float(fields.get("volume")),
+            }
+        elif action == "HEXW2":
+            params = {
+                "units": str(fields.get("units")),
+                "mode": str(fields.get("mode")),
+                "diameter_mm": float(fields.get("diameter_mm")),
+                "volume": float(fields.get("volume")),
+                "rate": float(fields.get("rate")),
+                "delay_min": float(fields.get("delay_min", 0.0)),
+                "start": True,
+                "target_eta_s": float(fields.get("target_eta_s", FLOWCELL_FILL_TARGET_S)),
+                "track_collection": bool(fields.get("track_collection", False)),
+                "collection_capacity_ml": float(fields.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)),
+                "collection_warn_ml": float(fields.get("collection_warn_ml", default_collection_warn_ml(fields.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)))),
+            }
+        elif action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT"}:
+            params = {}
+        else:
+            raise ValueError(f"Unsupported pump action: {action}")
+
+        return {
+            "type": f"PUMP_{action}",
+            "status": "pending",
+            "details": build_pump_details(action, params),
+            "pump_action": {"name": action, "params": params},
+        }
+
+    def _edit_queue_item(self, index: int):
+        if self._session.is_running:
+            messagebox.showwarning("Queue Running", "Stop before editing.")
+            return
+        if index < 0 or index >= len(self._session.measurement_queue):
+            return
+        item = self._session.measurement_queue[index]
+        if not self._is_editable_item(item):
+            return
+
+        fields = self._extract_edit_fields(item)
+        win = tk.Toplevel(self._frame)
+        win.title("Edit Queue Step")
+        win.transient(self._frame.winfo_toplevel())
+        win.grab_set()
+
+        pad = {"padx": 6, "pady": 4}
+        ttk.Label(win, text="Pump action:").grid(row=0, column=0, **pad, sticky="e")
+        action_var = tk.StringVar(value=fields["action"])
+        ttk.Combobox(
+            win,
+            textvariable=action_var,
+            values=[
+                "HEXW2",
+                "APPLY",
+                "COMMAND",
+                "START",
+                "PAUSE",
+                "STOP",
+                "RESTART",
+                "STATUS",
+                "STATUS_PORT",
+                "WAIT",
+                "ALERT",
+            ],
+            width=16,
+            state="readonly",
+        ).grid(row=0, column=1, **pad, sticky="w")
+
+        ttk.Label(win, text="Units:").grid(row=0, column=2, **pad, sticky="e")
+        units_var = tk.StringVar(value=fields["units"])
+        ttk.Combobox(
+            win,
+            textvariable=units_var,
+            values=["mLmin", "mLhr", "uLmin", "uLhr"],
+            width=10,
+            state="readonly",
+        ).grid(row=0, column=3, **pad, sticky="w")
+
+        ttk.Label(win, text="Mode:").grid(row=0, column=4, **pad, sticky="e")
+        mode_var = tk.StringVar(value=fields["mode"])
+        ttk.Combobox(
+            win,
+            textvariable=mode_var,
+            values=["infuse", "withdraw"],
+            width=10,
+            state="readonly",
+        ).grid(row=0, column=5, **pad, sticky="w")
+
+        ttk.Label(win, text="Diameter (mm):").grid(row=0, column=6, **pad, sticky="e")
+        diameter_var = tk.DoubleVar(value=fields["diameter_mm"])
+        ttk.Entry(win, width=10, textvariable=diameter_var).grid(row=0, column=7, **pad, sticky="w")
+
+        ttk.Label(win, text="Syringe preset:").grid(row=1, column=0, **pad, sticky="e")
+        syringe_var = tk.StringVar(value="Custom")
+        ttk.Combobox(
+            win,
+            textvariable=syringe_var,
+            values=["Custom"] + sorted(SYRINGE_PRESETS_MM.keys()),
+            width=22,
+            state="readonly",
+        ).grid(row=1, column=1, columnspan=2, **pad, sticky="w")
+
+        def _apply_preset(_e=None):
+            key = (syringe_var.get() or "").strip()
+            if not key or key == "Custom":
+                return
+            mm = SYRINGE_PRESETS_MM.get(key)
+            if mm is None:
+                return
+            diameter_var.set(float(mm))
+
+        ttk.Label(win, text="Rate:").grid(row=2, column=0, **pad, sticky="e")
+        rate_var = tk.DoubleVar(value=fields["rate"])
+        ttk.Entry(win, width=10, textvariable=rate_var).grid(row=2, column=1, **pad, sticky="w")
+
+        ttk.Label(win, text="Volume:").grid(row=2, column=2, **pad, sticky="e")
+        volume_var = tk.DoubleVar(value=fields["volume"])
+        ttk.Entry(win, width=10, textvariable=volume_var).grid(row=2, column=3, **pad, sticky="w")
+
+        ttk.Label(win, text="Delay (min):").grid(row=2, column=4, **pad, sticky="e")
+        delay_var = tk.DoubleVar(value=fields["delay_min"])
+        ttk.Entry(win, width=10, textvariable=delay_var).grid(row=2, column=5, **pad, sticky="w")
+
+        ttk.Label(win, text="Wait (sec):").grid(row=2, column=6, **pad, sticky="e")
+        wait_var = tk.DoubleVar(value=fields["wait"])
+        ttk.Entry(win, width=10, textvariable=wait_var).grid(row=2, column=7, **pad, sticky="w")
+
+        ttk.Label(win, text="Target ETA (s):").grid(row=3, column=0, **pad, sticky="e")
+        target_eta_var = tk.DoubleVar(value=fields["target_eta_s"])
+        ttk.Entry(win, width=10, textvariable=target_eta_var).grid(row=3, column=1, **pad, sticky="w")
+
+        def _match_eta():
+            rate = rate_for_target_eta(volume_var.get(), units_var.get(), target_eta_var.get())
+            if rate is None:
+                messagebox.showerror("Invalid ETA", "Provide volume, units, and a positive target ETA.")
+                return
+            rate_var.set(float(rate))
+            _update_eta_label()
+
+        def _apply_flowcell_preset():
+            action_var.set("HEXW2")
+            units_var.set("uLmin")
+            mode_var.set("withdraw")
+            volume_var.set(float(FLOWCELL_FILL_VOLUME_UL))
+            target_eta_var.set(float(FLOWCELL_FILL_TARGET_S))
+            rate = rate_for_target_eta(FLOWCELL_FILL_VOLUME_UL, "uLmin", FLOWCELL_FILL_TARGET_S)
+            if rate is not None:
+                rate_var.set(float(rate))
+            track_collection_var.set(True)
+            capacity_var.set(float(COLLECTION_SYRINGE_CAPACITY_ML))
+            warn_var.set(float(default_collection_warn_ml(capacity_var.get())))
+            try:
+                syringe_var.set("50/60 mL (typical)")
+                diameter_var.set(float(SYRINGE_PRESETS_MM["50/60 mL (typical)"]))
+            except Exception:
+                pass
+            _update_eta_label()
+
+        ttk.Button(win, text="Match ETA", command=_match_eta).grid(row=3, column=2, **pad, sticky="w")
+        ttk.Button(win, text="Preset Flowcell Pull", command=_apply_flowcell_preset).grid(
+            row=3, column=3, columnspan=2, **pad, sticky="w"
+        )
+
+        track_collection_var = tk.BooleanVar(value=fields["track_collection"])
+        ttk.Checkbutton(win, text="Track collected volume", variable=track_collection_var).grid(
+            row=3, column=5, columnspan=2, padx=6, pady=4, sticky="w"
+        )
+
+        ttk.Label(win, text="Capacity (mL):").grid(row=4, column=0, **pad, sticky="e")
+        capacity_var = tk.DoubleVar(value=fields["collection_capacity_ml"])
+        ttk.Entry(win, width=10, textvariable=capacity_var).grid(row=4, column=1, **pad, sticky="w")
+
+        ttk.Label(win, text="Warn at (mL):").grid(row=4, column=2, **pad, sticky="e")
+        warn_var = tk.DoubleVar(value=fields["collection_warn_ml"])
+        ttk.Entry(win, width=10, textvariable=warn_var).grid(row=4, column=3, **pad, sticky="w")
+
+        eta_label = ttk.Label(win, text="ETA: -", foreground="#555")
+        eta_label.grid(row=4, column=4, columnspan=4, padx=6, pady=4, sticky="w")
+
+        def _update_eta_label(*_args):
+            eta_s = estimate_eta_seconds(volume_var.get(), rate_var.get(), units_var.get())
+            if eta_s is None:
+                eta_label.configure(text="ETA: -")
+                return
+            extra = ""
+            if bool(track_collection_var.get()):
+                volume_ul = volume_to_ul(volume_var.get(), units_var.get())
+                if volume_ul is not None:
+                    extra = f" | collect {volume_ul / 1000.0:.3f} mL"
+            eta_label.configure(text=f"ETA: {eta_s:.1f}s{extra}")
+
+        for var in (units_var, rate_var, volume_var, target_eta_var, track_collection_var):
+            try:
+                var.trace_add("write", _update_eta_label)
+            except Exception:
+                pass
+        syringe_var.trace_add("write", lambda *_: _apply_preset())
+        _update_eta_label()
+
+        ttk.Label(win, text="Raw cmd:").grid(row=5, column=0, **pad, sticky="e")
+        cmd_var = tk.StringVar(value=fields["cmd"])
+        ttk.Entry(win, width=60, textvariable=cmd_var).grid(row=5, column=1, columnspan=7, **pad, sticky="w")
+
+        ttk.Label(win, text="Alert message:").grid(row=6, column=0, **pad, sticky="e")
+        alert_var = tk.StringVar(value=fields["alert"])
+        ttk.Entry(win, width=60, textvariable=alert_var).grid(row=6, column=1, columnspan=7, **pad, sticky="w")
+
+        btns = ttk.Frame(win)
+        btns.grid(row=7, column=0, columnspan=8, pady=(6, 8))
+
+        def _apply():
+            try:
+                new_item = self._build_edited_queue_item(
+                    {
+                        "action": action_var.get(),
+                        "units": units_var.get(),
+                        "mode": mode_var.get(),
+                        "diameter_mm": diameter_var.get(),
+                        "rate": rate_var.get(),
+                        "volume": volume_var.get(),
+                        "delay_min": delay_var.get(),
+                        "cmd": (cmd_var.get() or "").strip(),
+                        "wait": wait_var.get(),
+                        "alert": (alert_var.get() or "").strip(),
+                        "target_eta_s": target_eta_var.get(),
+                        "track_collection": track_collection_var.get(),
+                        "collection_capacity_ml": capacity_var.get(),
+                        "collection_warn_ml": warn_var.get(),
+                    }
+                )
+            except Exception as exc:
+                messagebox.showerror("Invalid queue step", str(exc))
+                return
+
+            if "method_ref" in item and "method_ref" not in new_item:
+                new_item["method_ref"] = dict(item.get("method_ref") or {})
+            new_item["status"] = item.get("status", "pending")
+            self._session.measurement_queue[index] = new_item
+            self.refresh()
+            win.destroy()
+
+        ttk.Button(btns, text="Update", command=_apply).pack(side="left", padx=6)
+        ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="left", padx=6)
+        win.bind("<Return>", lambda _e: _apply())
+        win.bind("<Escape>", lambda _e: win.destroy())
 
     # ── Drag reorder ──────────────────────────────────────────────────────────
 
@@ -770,6 +1162,8 @@ class QueueTab:
             current_label="(starting)",
             started_at=datetime.now().isoformat(timespec="seconds"),
         )
+        self._session.reset_collection_tracking()
+        self.refresh_labels()
         self.clear_log()
         self.log("Queue start requested.")
         self.log(f"Measurement simulation: {'ON' if self._session.simulate_measurements else 'OFF'}")
@@ -809,6 +1203,8 @@ class QueueTab:
             current_label="(starting)",
             started_at=datetime.now().isoformat(timespec="seconds"),
         )
+        self._session.reset_collection_tracking()
+        self.refresh_labels()
         self.clear_log()
         self.log("Queue start from selected requested.")
         self.log(f"Measurement simulation: {'ON' if self._session.simulate_measurements else 'OFF'}")
@@ -1197,6 +1593,7 @@ class QueueTab:
         name        = action_info.get("name")
         params      = action_info.get("params") or {}
         details     = item.get("details", f"Pump {name}")
+        collection_info = self._tracked_collection_info(params) if str(name).upper() == "HEXW2" else None
 
         if not name:
             self.log("Invalid pump item: missing action name."); return False
@@ -1232,6 +1629,31 @@ class QueueTab:
                 return True
 
             if name == "HEXW2":
+                if collection_info is not None:
+                    projected_ul = self._session.collection_volume_ul + collection_info["step_volume_ul"]
+                    if collection_info["capacity_ul"] > 0 and projected_ul > collection_info["capacity_ul"]:
+                        msg = (
+                            "Collection syringe capacity would be exceeded. "
+                            f"Projected total {format_ml_from_ul(projected_ul)} > "
+                            f"{format_ml_from_ul(collection_info['capacity_ul'])}."
+                        )
+                        self.log(msg)
+                        self._session.is_running = False
+                        self._root.after(0, lambda m=msg: messagebox.showerror("Collection Capacity", m))
+                        return False
+                    if (
+                        collection_info["warn_ul"] > 0
+                        and projected_ul >= collection_info["warn_ul"]
+                        and not self._session.collection_warned
+                    ):
+                        self._session.collection_warned = True
+                        warn_msg = (
+                            "Collection syringe is nearing capacity. "
+                            f"Projected total after this pull: {format_ml_from_ul(projected_ul)}."
+                        )
+                        self.log(f"WARNING: {warn_msg}")
+                        self._root.after(0, lambda m=warn_msg: messagebox.showwarning("Collection Warning", m))
+
                 run_kwargs = {
                     "units": str(params["units"]),
                     "mode": str(params["mode"]),
@@ -1250,7 +1672,21 @@ class QueueTab:
                     if not self._ensure_pump_started(run_kwargs):
                         self.log("Pump run did not start (status stayed complete/idle).")
                         return False
-                    return self._wait_for_pump_complete(params)
+                    ok = self._wait_for_pump_complete(params)
+                    if ok and collection_info is not None:
+                        self._session.add_collection_volume(
+                            volume_ul=collection_info["step_volume_ul"],
+                            capacity_ul=collection_info["capacity_ul"],
+                            warn_ul=collection_info["warn_ul"],
+                        )
+                        self.log(
+                            "Collection total -> "
+                            f"{self._session.collection_steps} step(s), "
+                            f"{format_ml_from_ul(self._session.collection_volume_ul)} / "
+                            f"{format_ml_from_ul(self._session.collection_capacity_ul)}"
+                        )
+                        self._root.after(0, self.refresh_labels)
+                    return ok
                 return True
 
             if name == "STATUS":
@@ -1409,6 +1845,27 @@ class QueueTab:
         if code is not None:
             state = self._status_text(code)
             self.log(f"Pump ops/status code: {code} ({state})")
+
+    @staticmethod
+    def _tracked_collection_info(params: dict) -> dict | None:
+        if not bool((params or {}).get("track_collection")):
+            return None
+        volume_ul = volume_to_ul((params or {}).get("volume"), str((params or {}).get("units") or ""))
+        if volume_ul is None:
+            return None
+        try:
+            capacity_ml = float((params or {}).get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML))
+        except (TypeError, ValueError):
+            capacity_ml = float(COLLECTION_SYRINGE_CAPACITY_ML)
+        try:
+            warn_ml = float((params or {}).get("collection_warn_ml", default_collection_warn_ml(capacity_ml)))
+        except (TypeError, ValueError):
+            warn_ml = float(default_collection_warn_ml(capacity_ml))
+        return {
+            "step_volume_ul": max(0.0, float(volume_ul)),
+            "capacity_ul": max(0.0, capacity_ml * 1000.0),
+            "warn_ul": max(0.0, warn_ml * 1000.0),
+        }
 
     @staticmethod
     def _parse_status_code(text: str) -> int | None:

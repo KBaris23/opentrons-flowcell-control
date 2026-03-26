@@ -64,5 +64,129 @@
     "note": "Generated Protocol",
     "added_at": "2026-03-19T14:54:38",
     "filepath": "opentrons_protocols\\library\\generated_ui_protocol_3e8854.py"
+  },
+  "generated_ui_protocol_9af2ec": {
+    "kind": "generated_ui_protocol",
+    "params": {
+      "labware": [
+        {
+          "alias": "tips",
+          "load_name": "opentrons_96_filtertiprack_20ul",
+          "slot": "4"
+        },
+        {
+          "alias": "stock",
+          "load_name": "opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap",
+          "slot": "5"
+        },
+        {
+          "alias": "dilute",
+          "load_name": "opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical",
+          "slot": "6"
+        }
+      ],
+      "metadata": {
+        "api_level": "2.19",
+        "author": "Opentrons Flowcell Console",
+        "description": "5-step titration, pause after each addition",
+        "protocol_name": "Titration_5x5uL",
+        "robot_type": "OT-2"
+      },
+      "pipette": {
+        "model": "p20_single_gen2",
+        "mount": "left",
+        "tiprack_alias": "tips"
+      },
+      "steps": [
+        {
+          "comment": "Titration step 1",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A1",
+          "kind": "transfer",
+          "new_tip": "always",
+          "source_alias": "stock",
+          "source_well": "A1",
+          "volume_ul": 5.0
+        },
+        {
+          "kind": "pause",
+          "message": "Run syringe pull and SWV for titration step, then resume."
+        },
+        {
+          "comment": "Titration step 2",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A1",
+          "kind": "transfer",
+          "new_tip": "always",
+          "source_alias": "stock",
+          "source_well": "A1",
+          "volume_ul": 5.0
+        },
+        {
+          "kind": "pause",
+          "message": "Run syringe pull and SWV for titration step, then resume."
+        },
+        {
+          "comment": "Titration step 3",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A1",
+          "kind": "transfer",
+          "new_tip": "always",
+          "source_alias": "stock",
+          "source_well": "A1",
+          "volume_ul": 5.0
+        },
+        {
+          "kind": "pause",
+          "message": "Run syringe pull and SWV for titration step, then resume."
+        },
+        {
+          "comment": "Titration step 4",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A1",
+          "kind": "transfer",
+          "new_tip": "always",
+          "source_alias": "stock",
+          "source_well": "A1",
+          "volume_ul": 5.0
+        },
+        {
+          "kind": "pause",
+          "message": "Run syringe pull and SWV for titration step, then resume."
+        },
+        {
+          "comment": "Titration step 5",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A1",
+          "kind": "transfer",
+          "new_tip": "always",
+          "source_alias": "stock",
+          "source_well": "A1",
+          "volume_ul": 5.0
+        },
+        {
+          "comment": "Titrations complete",
+          "kind": "comment"
+        }
+      ]
+    },
+    "note": "Titration_5x5uL",
+    "added_at": "2026-03-26T00:11:42",
+    "filepath": "opentrons_protocols\\library\\generated_ui_protocol_9af2ec.py"
   }
 }

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import re
 import subprocess
 import sys
 import threading
@@ -44,6 +46,23 @@ class OpentronsTab:
         "pause",
     ]
 
+    _LABWARE_LOAD_NAME_PRESETS = [
+        "opentrons_96_filtertiprack_20ul",
+        "opentrons_96_filtertiprack_200ul",
+        "opentrons_96_filtertiprack_1000ul",
+        "opentrons_24_tuberack_nest_2ml_snapcap",
+        "opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap",
+        "opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical",
+        "opentrons_15_tuberack_falcon_15ml_conical",
+    ]
+    _PIPETTE_MAX_VOLUME_UL = {
+        "p20_single_gen2": 20.0,
+        "p300_single_gen2": 300.0,
+        "p1000_single_gen2": 1000.0,
+    }
+    _GENERIC_WELL_RE = re.compile(r"^([A-P])([1-9]|1[0-9]|2[0-4])$")
+    _MAX_TRANSFER_VOLUME_UL = 50000.0
+
     def __init__(self, parent_frame, session, on_add_to_queue, root: tk.Tk):
         self._frame = parent_frame
         self._session = session
@@ -56,12 +75,14 @@ class OpentronsTab:
         self._protocol_map: dict[str, Path] = {}
         self._labware_rows: list[dict] = []
         self._step_rows: list[dict] = []
+        self._step_clipboard: list[dict] = []
         self._selected_labware_index: int | None = None
         self._selected_step_index: int | None = None
 
         self._build()
         self._seed_builder_defaults()
         self._load_protocol_files()
+        self._refresh_labware_name_options()
         self._refresh_labware_tree()
         self._refresh_step_tree()
         self.preview_builder_protocol()
@@ -70,42 +91,18 @@ class OpentronsTab:
         container = ttk.Frame(self._frame)
         container.pack(fill="both", expand=True, padx=8, pady=8)
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(1, weight=1, minsize=260)
+        container.rowconfigure(0, weight=1, minsize=260)
 
-        self._summary_frame(container)
-
-        body = ttk.Panedwindow(container, orient="vertical")
-        body.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
-
-        top = ttk.Frame(body)
-        bottom = ttk.Frame(body)
-        top.columnconfigure(0, weight=1)
-        top.rowconfigure(0, weight=1)
-        bottom.columnconfigure(0, weight=1)
-        bottom.rowconfigure(0, weight=1)
-        body.add(top, weight=3)
-        body.add(bottom, weight=1)
-
-        notebook = ttk.Notebook(top)
+        notebook = ttk.Notebook(container)
         notebook.grid(row=0, column=0, sticky="nsew")
 
         file_tab = ttk.Frame(notebook)
         builder_tab = ttk.Frame(notebook)
-        notebook.add(file_tab, text="Protocol Files")
+        notebook.add(file_tab, text="Protocol Config")
         notebook.add(builder_tab, text="Protocol Builder")
 
         self._build_file_tab(file_tab)
         self._build_builder_tab(builder_tab)
-
-        log_frame = ttk.LabelFrame(bottom, text="Log")
-        log_frame.grid(row=0, column=0, sticky="nsew")
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
-        self._log_text = tk.Text(log_frame, height=10, state="disabled")
-        self._log_text.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=6)
-        scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self._log_text.yview)
-        scroll.grid(row=0, column=1, sticky="ns", padx=(4, 6), pady=6)
-        self._log_text.configure(yscrollcommand=scroll.set)
 
     def _summary_frame(self, parent) -> None:
         summary = ttk.LabelFrame(parent, text="Protocol Summary")
@@ -156,9 +153,23 @@ class OpentronsTab:
 
     def _build_file_tab(self, parent) -> None:
         parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
 
-        top = ttk.LabelFrame(parent, text="Saved / Bundled Protocols")
-        top.grid(row=0, column=0, sticky="ew", padx=4, pady=4)
+        self._summary_frame(parent)
+
+        body = ttk.Panedwindow(parent, orient="vertical")
+        body.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
+
+        config_wrap = ttk.Frame(body)
+        config_wrap.columnconfigure(0, weight=1)
+        log_wrap = ttk.Frame(body)
+        log_wrap.columnconfigure(0, weight=1)
+        log_wrap.rowconfigure(0, weight=1)
+        body.add(config_wrap, weight=3)
+        body.add(log_wrap, weight=1)
+
+        top = ttk.LabelFrame(config_wrap, text="Saved / Bundled Protocols")
+        top.grid(row=0, column=0, sticky="ew")
         top.columnconfigure(1, weight=1)
         top.columnconfigure(3, weight=1)
 
@@ -236,14 +247,33 @@ class OpentronsTab:
         ttk.Button(btns, text="Add to Queue", command=self.add_file_to_queue).pack(side="left", padx=4)
         ttk.Button(btns, text="Add Resume", command=self.add_file_resume_to_queue).pack(side="left", padx=4)
 
+        tips = ttk.LabelFrame(config_wrap, text="Quick Help")
+        tips.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        tips.columnconfigure(0, weight=1)
+        ttk.Label(
+            tips,
+            text=(
+                "Inspect: read the file and summarize it.  "
+                "Preview: show builder-generated Python code.  "
+                "Validate: check only, no simulation or robot run."
+            ),
+            wraplength=900,
+            justify="left",
+        ).grid(row=0, column=0, padx=8, pady=6, sticky="w")
+
+        log_frame = ttk.LabelFrame(log_wrap, text="Log")
+        log_frame.grid(row=0, column=0, sticky="nsew")
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+        self._log_text = tk.Text(log_frame, height=10, state="disabled")
+        self._log_text.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=6)
+        scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self._log_text.yview)
+        scroll.grid(row=0, column=1, sticky="ns", padx=(4, 6), pady=6)
+        self._log_text.configure(yscrollcommand=scroll.set)
+
     def _build_builder_tab(self, parent) -> None:
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
-
-        meta = ttk.LabelFrame(parent, text="Metadata")
-        meta.grid(row=0, column=0, sticky="ew", padx=4, pady=4)
-        for col in range(6):
-            meta.columnconfigure(col, weight=1 if col in (1, 3, 5) else 0)
+        parent.rowconfigure(0, weight=1)
 
         self._builder_mode_var = tk.StringVar(value=self._mode_label(OPENTRONS_DEFAULT_RUN_MODE))
         self._builder_protocol_name = tk.StringVar(value="Generated Protocol")
@@ -254,6 +284,40 @@ class OpentronsTab:
         self._builder_pipette_model = tk.StringVar(value="p20_single_gen2")
         self._builder_mount = tk.StringVar(value="left")
         self._builder_tiprack_alias = tk.StringVar(value="tips")
+
+        notebook = ttk.Notebook(parent)
+        notebook.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+
+        setup_tab = ttk.Frame(notebook, padding=4)
+        steps_tab = ttk.Frame(notebook, padding=4)
+        preview_tab = ttk.Frame(notebook, padding=4)
+        notebook.add(setup_tab, text="Setup")
+        notebook.add(steps_tab, text="Steps")
+        notebook.add(preview_tab, text="Generated Preview")
+
+        self._build_builder_setup_tab(setup_tab)
+        self._build_builder_steps_tab(steps_tab)
+        self._build_builder_preview_tab(preview_tab)
+
+    def _build_builder_setup_tab(self, parent) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+
+        setup_pane = ttk.Panedwindow(parent, orient="vertical")
+        setup_pane.grid(row=0, column=0, sticky="nsew")
+
+        meta_wrap = ttk.Frame(setup_pane)
+        meta_wrap.columnconfigure(0, weight=1)
+        deck_wrap = ttk.Frame(setup_pane)
+        deck_wrap.columnconfigure(0, weight=1)
+        deck_wrap.rowconfigure(0, weight=1)
+        setup_pane.add(meta_wrap, weight=2)
+        setup_pane.add(deck_wrap, weight=3)
+
+        meta = ttk.LabelFrame(meta_wrap, text="Protocol Metadata")
+        meta.grid(row=0, column=0, sticky="ew")
+        for col in range(6):
+            meta.columnconfigure(col, weight=1 if col in (1, 3, 5) else 0)
 
         ttk.Label(meta, text="Name:").grid(row=0, column=0, padx=4, pady=4, sticky="e")
         ttk.Entry(meta, textvariable=self._builder_protocol_name).grid(row=0, column=1, padx=4, pady=4, sticky="ew")
@@ -292,20 +356,43 @@ class OpentronsTab:
         ttk.Label(meta, text="Tiprack alias:").grid(row=3, column=0, padx=4, pady=4, sticky="e")
         ttk.Entry(meta, textvariable=self._builder_tiprack_alias, width=12).grid(row=3, column=1, padx=4, pady=4, sticky="w")
 
-        body = ttk.Panedwindow(parent, orient="horizontal")
-        body.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
+        self._build_labware_panel(deck_wrap)
 
-        left = ttk.Frame(body)
-        right = ttk.Frame(body)
-        for frame in (left, right):
-            frame.columnconfigure(0, weight=1)
-        left.rowconfigure(1, weight=1)
-        right.rowconfigure(1, weight=1)
-        body.add(left, weight=1)
-        body.add(right, weight=2)
+        action_btns = ttk.Frame(parent)
+        action_btns.grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Button(action_btns, text="Preview", command=self.preview_builder_protocol).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Run Now", command=self.run_builder_now).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
 
-        self._build_labware_panel(left)
-        self._build_steps_panel(right)
+    def _build_builder_steps_tab(self, parent) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        self._build_steps_panel(parent)
+
+    def _build_builder_preview_tab(self, parent) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+
+        preview_frame = ttk.LabelFrame(parent, text="Generated Protocol Preview")
+        preview_frame.grid(row=0, column=0, sticky="nsew")
+        preview_frame.columnconfigure(0, weight=1)
+        preview_frame.rowconfigure(0, weight=1)
+
+        self._preview_text = tk.Text(preview_frame, height=20, state="disabled")
+        self._preview_text.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=6)
+        scroll = ttk.Scrollbar(preview_frame, orient="vertical", command=self._preview_text.yview)
+        scroll.grid(row=0, column=1, sticky="ns", padx=(4, 6), pady=6)
+        self._preview_text.configure(yscrollcommand=scroll.set)
+
+        action_btns = ttk.Frame(parent)
+        action_btns.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Button(action_btns, text="Preview", command=self.preview_builder_protocol).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Run Now", command=self.run_builder_now).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
 
     def _build_labware_panel(self, parent) -> None:
         frame = ttk.LabelFrame(parent, text="Deck Labware")
@@ -325,7 +412,12 @@ class OpentronsTab:
         ttk.Label(form, text="Alias").grid(row=0, column=0, padx=2, pady=2, sticky="w")
         ttk.Entry(form, textvariable=self._labware_alias_var).grid(row=1, column=0, padx=2, pady=2, sticky="ew")
         ttk.Label(form, text="Load name").grid(row=0, column=1, padx=2, pady=2, sticky="w")
-        ttk.Entry(form, textvariable=self._labware_name_var).grid(row=1, column=1, columnspan=3, padx=2, pady=2, sticky="ew")
+        self._combo_labware_name = ttk.Combobox(
+            form,
+            textvariable=self._labware_name_var,
+            values=self._labware_load_name_options(),
+        )
+        self._combo_labware_name.grid(row=1, column=1, columnspan=3, padx=2, pady=2, sticky="ew")
         ttk.Label(form, text="Slot").grid(row=0, column=4, padx=2, pady=2, sticky="w")
         ttk.Entry(form, textvariable=self._labware_slot_var, width=8).grid(row=1, column=4, padx=2, pady=2, sticky="ew")
 
@@ -333,6 +425,13 @@ class OpentronsTab:
         btns.grid(row=1, column=5, padx=2, pady=2, sticky="e")
         ttk.Button(btns, text="Add / Update", command=self._upsert_labware).pack(side="left", padx=2)
         ttk.Button(btns, text="Delete", command=self._delete_labware).pack(side="left", padx=2)
+        ttk.Label(
+            form,
+            text="Load name must match an Opentrons labware definition exactly. Pick a preset or type your own.",
+            foreground="#666",
+            wraplength=760,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=6, padx=2, pady=(2, 0), sticky="w")
 
         cols = ("Alias", "Load Name", "Slot")
         self._labware_tree = ttk.Treeview(frame, columns=cols, show="headings", height=8)
@@ -343,7 +442,23 @@ class OpentronsTab:
         self._labware_tree.bind("<<TreeviewSelect>>", self._on_labware_selected)
 
     def _build_steps_panel(self, parent) -> None:
-        controls = ttk.LabelFrame(parent, text="Step Builder")
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+
+        self._step_warning_var = tk.StringVar(value="")
+
+        main_pane = ttk.Panedwindow(parent, orient="vertical")
+        main_pane.grid(row=0, column=0, sticky="nsew")
+
+        controls_wrap = ttk.Frame(main_pane)
+        controls_wrap.columnconfigure(0, weight=1)
+        middle_wrap = ttk.Frame(main_pane)
+        middle_wrap.columnconfigure(0, weight=1)
+        middle_wrap.rowconfigure(0, weight=1)
+        main_pane.add(controls_wrap, weight=3)
+        main_pane.add(middle_wrap, weight=5)
+
+        controls = ttk.LabelFrame(controls_wrap, text="Step Builder")
         controls.grid(row=0, column=0, sticky="ew")
         for col in range(8):
             controls.columnconfigure(col, weight=1)
@@ -392,24 +507,25 @@ class OpentronsTab:
 
         step_btns = ttk.Frame(controls)
         step_btns.grid(row=4, column=0, columnspan=8, padx=2, pady=(4, 2), sticky="w")
-        ttk.Button(step_btns, text="Add / Update Step", command=self._upsert_step).pack(side="left", padx=2)
+        ttk.Button(step_btns, text="Add Step", command=self._add_step).pack(side="left", padx=2)
+        ttk.Button(step_btns, text="Update Selected", command=self._update_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Delete Step", command=self._delete_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Clear Steps", command=self._clear_steps).pack(side="left", padx=2)
+        ttk.Label(
+            controls,
+            textvariable=self._step_warning_var,
+            foreground="#b00020",
+            wraplength=900,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=8, padx=2, pady=(2, 0), sticky="w")
 
-        middle = ttk.Panedwindow(parent, orient="vertical")
-        middle.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
-
-        tree_frame = ttk.Frame(middle)
+        tree_frame = ttk.Frame(middle_wrap)
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
-        preview_frame = ttk.LabelFrame(middle, text="Generated Protocol Preview")
-        preview_frame.columnconfigure(0, weight=1)
-        preview_frame.rowconfigure(0, weight=1)
-        middle.add(tree_frame, weight=2)
-        middle.add(preview_frame, weight=3)
+        tree_frame.grid(row=0, column=0, sticky="nsew", pady=(6, 0))
 
         cols = ("#", "Kind", "Details")
-        self._step_tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=8)
+        self._step_tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=8, selectmode="extended")
         for col, width in (("#", 50), ("Kind", 120), ("Details", 520)):
             self._step_tree.heading(col, text=col)
             self._step_tree.column(col, width=width)
@@ -418,20 +534,36 @@ class OpentronsTab:
         tree_scroll.grid(row=0, column=1, sticky="ns", padx=(4, 0))
         self._step_tree.configure(yscrollcommand=tree_scroll.set)
         self._step_tree.bind("<<TreeviewSelect>>", self._on_step_selected)
+        self._step_tree.bind("<Button-3>", self._show_step_ctx)
+        self._step_tree.bind("<Control-c>", lambda _event: self._copy_selected_steps())
+        self._step_tree.bind("<Control-v>", lambda _event: self._paste_steps_after_selected())
+        self._step_tree.bind("<Control-d>", lambda _event: self._duplicate_selected_steps())
 
-        self._preview_text = tk.Text(preview_frame, height=14, state="disabled")
-        self._preview_text.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=6)
-        scroll = ttk.Scrollbar(preview_frame, orient="vertical", command=self._preview_text.yview)
-        scroll.grid(row=0, column=1, sticky="ns", padx=(4, 6), pady=6)
-        self._preview_text.configure(yscrollcommand=scroll.set)
+        self._step_ctx = tk.Menu(self._root, tearoff=0)
+        self._step_ctx.add_command(label="Copy", command=self._copy_selected_steps)
+        self._step_ctx.add_command(label="Paste After", command=self._paste_steps_after_selected)
+        self._step_ctx.add_command(label="Duplicate", command=self._duplicate_selected_steps)
+        self._step_ctx.add_separator()
+        self._step_ctx.add_command(label="Delete", command=self._delete_step)
 
         action_btns = ttk.Frame(parent)
-        action_btns.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        action_btns.grid(row=1, column=0, sticky="w", pady=(6, 0))
         ttk.Button(action_btns, text="Preview", command=self.preview_builder_protocol).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Run Now", command=self.run_builder_now).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
+
+        edit_btns = ttk.Frame(parent)
+        edit_btns.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Button(edit_btns, text="Copy", command=self._copy_selected_steps).pack(side="left", padx=3)
+        ttk.Button(edit_btns, text="Paste After", command=self._paste_steps_after_selected).pack(side="left", padx=3)
+        ttk.Button(edit_btns, text="Duplicate", command=self._duplicate_selected_steps).pack(side="left", padx=3)
+        ttk.Label(
+            edit_btns,
+            text="Shortcuts: Ctrl+C copy, Ctrl+V paste after, Ctrl+D duplicate",
+            foreground="#666",
+        ).pack(side="left", padx=(8, 0))
 
     def _seed_builder_defaults(self) -> None:
         self._labware_rows = [
@@ -450,6 +582,95 @@ class OpentronsTab:
                 "new_tip": "once",
             }
         ]
+
+    def _labware_load_name_options(self) -> list[str]:
+        names = {
+            str(entry.get("load_name", "")).strip()
+            for entry in self._labware_rows
+            if str(entry.get("load_name", "")).strip()
+        }
+        names.update(self._LABWARE_LOAD_NAME_PRESETS)
+        return sorted(names)
+
+    def _refresh_labware_name_options(self) -> None:
+        if hasattr(self, "_combo_labware_name"):
+            self._combo_labware_name.configure(values=self._labware_load_name_options())
+
+    def _set_step_warning(self, message: str) -> None:
+        if hasattr(self, "_step_warning_var"):
+            self._step_warning_var.set(message)
+
+    def _known_labware_aliases(self) -> set[str]:
+        aliases = {
+            str(entry.get("alias", "")).strip()
+            for entry in self._labware_rows
+            if str(entry.get("alias", "")).strip()
+        }
+        tiprack_alias = (self._builder_tiprack_alias.get() or "").strip()
+        if tiprack_alias:
+            aliases.add(tiprack_alias)
+        return aliases
+
+    def _validate_alias(self, alias: str, field_name: str) -> None:
+        if not alias:
+            raise ValueError(f"{field_name} is required.")
+        if alias not in self._known_labware_aliases():
+            known = ", ".join(sorted(self._known_labware_aliases())) or "(none)"
+            raise ValueError(f"{field_name} '{alias}' does not exist. Known aliases: {known}.")
+
+    def _validate_well(self, well: str, field_name: str) -> None:
+        if not well:
+            raise ValueError(f"{field_name} is required.")
+        if not self._GENERIC_WELL_RE.fullmatch(well):
+            raise ValueError(f"{field_name} '{well}' is not a sane well name. Use something like A1 through P24.")
+
+    def _validate_step(self, step: dict) -> None:
+        kind = step.get("kind", "")
+        pipette_model = (self._builder_pipette_model.get() or "").strip()
+        pipette_max_ul = self._PIPETTE_MAX_VOLUME_UL.get(pipette_model, 0.0)
+
+        if kind in {"transfer", "aspirate", "dispense"}:
+            volume_ul = float(step.get("volume_ul", 0))
+            if volume_ul <= 0:
+                raise ValueError("Volume must be greater than 0 uL.")
+            if kind in {"aspirate", "dispense"} and pipette_max_ul and volume_ul > pipette_max_ul:
+                raise ValueError(f"{kind.title()} volume {volume_ul:g} uL exceeds the selected pipette capacity ({pipette_max_ul:g} uL).")
+            if kind == "transfer" and volume_ul > self._MAX_TRANSFER_VOLUME_UL:
+                raise ValueError(f"Transfer volume {volume_ul:g} uL is too large for a sane builder step. Split it into smaller steps.")
+
+        if kind in {"transfer", "aspirate", "move_to", "blow_out"}:
+            self._validate_alias(str(step.get("source_alias", "")).strip(), "Source alias")
+            self._validate_well(str(step.get("source_well", "")).strip().upper(), "Source well")
+
+        if kind in {"transfer", "dispense"}:
+            self._validate_alias(str(step.get("dest_alias", "")).strip(), "Dest alias")
+            self._validate_well(str(step.get("dest_well", "")).strip().upper(), "Dest well")
+
+        if kind in {"pick_up_tip", "drop_tip"}:
+            alias = str(step.get("source_alias", "")).strip() or (self._builder_tiprack_alias.get() or "").strip()
+            step["source_alias"] = alias
+            self._validate_alias(alias, "Tiprack alias")
+            well = str(step.get("source_well", "")).strip().upper()
+            if well:
+                self._validate_well(well, "Tip well")
+                step["source_well"] = well
+
+        if kind == "move_to":
+            location = str(step.get("location", "")).strip().lower()
+            if location not in {"top", "center", "bottom"}:
+                raise ValueError("Location must be top, center, or bottom.")
+
+        if kind == "transfer":
+            new_tip = str(step.get("new_tip", "")).strip().lower()
+            if new_tip not in {"once", "always", "never"}:
+                raise ValueError("New Tip must be once, always, or never.")
+
+        if kind == "delay":
+            seconds = float(step.get("seconds", 0))
+            if seconds < 0:
+                raise ValueError("Delay must be 0 seconds or more.")
+            if seconds > 86400:
+                raise ValueError("Delay is too large for a sane builder step.")
 
     def log(self, msg: str) -> None:
         if self._log_text is None:
@@ -474,6 +695,18 @@ class OpentronsTab:
                 return key
         return OPENTRONS_DEFAULT_RUN_MODE
 
+    def _protocol_file_label(self, path: Path, root: Path) -> str:
+        try:
+            rel = str(path.relative_to(root))
+        except ValueError:
+            rel = path.name
+        try:
+            summary = self._runner.inspect_protocol(path)
+            name = (summary.protocol_name or "").strip() or path.stem
+        except Exception:
+            name = path.stem
+        return f"{name} | {rel}"
+
     def _load_protocol_files(self) -> None:
         proto_dir = Path(OPENTRONS_PROTOCOLS_DIR)
         proto_dir.mkdir(parents=True, exist_ok=True)
@@ -484,10 +717,7 @@ class OpentronsTab:
         )
         self._protocol_map = {}
         for path in files:
-            try:
-                label = str(path.relative_to(proto_dir))
-            except ValueError:
-                label = path.name
+            label = self._protocol_file_label(path, proto_dir)
             self._protocol_map[label] = path
         labels = list(self._protocol_map)
         self._combo_bundled.configure(values=labels)
@@ -788,6 +1018,24 @@ class OpentronsTab:
                 values=(idx, step.get("kind", ""), self._describe_step(step)),
             )
 
+    def _selected_step_indices(self) -> list[int]:
+        selected = []
+        for item_id in self._step_tree.selection():
+            try:
+                selected.append(int(item_id))
+            except (TypeError, ValueError):
+                continue
+        return sorted(selected)
+
+    def _select_step_indices(self, indices: list[int]) -> None:
+        valid = [str(idx) for idx in indices if 0 <= idx < len(self._step_rows)]
+        self._step_tree.selection_set(valid)
+        if valid:
+            self._step_tree.focus(valid[0])
+            self._step_tree.see(valid[0])
+        else:
+            self._step_tree.selection_remove(self._step_tree.selection())
+
     def _on_labware_selected(self, _event=None) -> None:
         sel = self._labware_tree.selection()
         if not sel:
@@ -813,6 +1061,7 @@ class OpentronsTab:
         else:
             self._labware_rows[self._selected_labware_index] = row
         self._selected_labware_index = None
+        self._refresh_labware_name_options()
         self._refresh_labware_tree()
         self.preview_builder_protocol()
 
@@ -821,6 +1070,7 @@ class OpentronsTab:
             return
         self._labware_rows.pop(self._selected_labware_index)
         self._selected_labware_index = None
+        self._refresh_labware_name_options()
         self._refresh_labware_tree()
         self.preview_builder_protocol()
 
@@ -829,8 +1079,9 @@ class OpentronsTab:
         if not sel:
             self._selected_step_index = None
             return
-        idx = int(sel[0])
+        idx = min(int(item) for item in sel)
         self._selected_step_index = idx
+        self._set_step_warning("")
         step = self._step_rows[idx]
         self._step_kind_var.set(step.get("kind", "transfer"))
         self._step_volume_var.set(str(step.get("volume_ul", "")))
@@ -872,26 +1123,51 @@ class OpentronsTab:
             step["message"] = message
         return step
 
-    def _upsert_step(self) -> None:
+    def _validated_step_from_form(self) -> dict:
         try:
             step = self._current_step_from_form()
         except Exception as exc:
-            messagebox.showerror("Invalid Step", str(exc))
+            self._set_step_warning(str(exc))
+            raise
+        self._validate_step(step)
+        self._set_step_warning("")
+        return step
+
+    def _add_step(self) -> None:
+        try:
+            step = self._validated_step_from_form()
+        except Exception:
             return
-        if self._selected_step_index is None:
-            self._step_rows.append(step)
-        else:
-            self._step_rows[self._selected_step_index] = step
+        self._step_rows.append(step)
         self._selected_step_index = None
         self._refresh_step_tree()
+        self._select_step_indices([len(self._step_rows) - 1])
+        self.preview_builder_protocol()
+
+    def _update_step(self) -> None:
+        if self._selected_step_index is None:
+            self._set_step_warning("Select a step first if you want to update it.")
+            return
+        try:
+            step = self._validated_step_from_form()
+        except Exception:
+            return
+        self._step_rows[self._selected_step_index] = step
+        self._refresh_step_tree()
+        self._select_step_indices([self._selected_step_index])
         self.preview_builder_protocol()
 
     def _delete_step(self) -> None:
-        if self._selected_step_index is None:
+        idxs = self._selected_step_indices()
+        if not idxs:
             return
-        self._step_rows.pop(self._selected_step_index)
+        for idx in reversed(idxs):
+            self._step_rows.pop(idx)
         self._selected_step_index = None
         self._refresh_step_tree()
+        next_idx = min(idxs[0], len(self._step_rows) - 1)
+        if self._step_rows:
+            self._select_step_indices([next_idx])
         self.preview_builder_protocol()
 
     def _clear_steps(self) -> None:
@@ -899,6 +1175,53 @@ class OpentronsTab:
         self._selected_step_index = None
         self._refresh_step_tree()
         self.preview_builder_protocol()
+
+    def _copy_selected_steps(self) -> None:
+        idxs = self._selected_step_indices()
+        if not idxs:
+            messagebox.showwarning("No Selection", "Select one or more builder steps to copy.")
+            return
+        self._step_clipboard = [copy.deepcopy(self._step_rows[idx]) for idx in idxs]
+        self.log(f"Copied {len(self._step_clipboard)} builder step(s).")
+
+    def _paste_steps_after_selected(self) -> None:
+        if not self._step_clipboard:
+            messagebox.showwarning("Empty Clipboard", "Copy builder steps first.")
+            return
+        idxs = self._selected_step_indices()
+        pos = (idxs[-1] + 1) if idxs else len(self._step_rows)
+        pasted = [copy.deepcopy(step) for step in self._step_clipboard]
+        self._step_rows[pos:pos] = pasted
+        self._selected_step_index = None
+        self._refresh_step_tree()
+        self._select_step_indices(list(range(pos, pos + len(pasted))))
+        self.preview_builder_protocol()
+        self.log(f"Pasted {len(pasted)} builder step(s) after step {pos}.")
+
+    def _duplicate_selected_steps(self) -> None:
+        idxs = self._selected_step_indices()
+        if not idxs:
+            messagebox.showwarning("No Selection", "Select one or more builder steps to duplicate.")
+            return
+        duplicates = [copy.deepcopy(self._step_rows[idx]) for idx in idxs]
+        insert_at = idxs[-1] + 1
+        self._step_rows[insert_at:insert_at] = duplicates
+        self._selected_step_index = None
+        self._refresh_step_tree()
+        self._select_step_indices(list(range(insert_at, insert_at + len(duplicates))))
+        self.preview_builder_protocol()
+        self.log(f"Duplicated {len(duplicates)} builder step(s).")
+
+    def _show_step_ctx(self, event) -> None:
+        row = self._step_tree.identify_row(event.y)
+        if row:
+            existing = self._step_tree.selection()
+            if row not in existing:
+                self._step_tree.selection_set(row)
+        try:
+            self._step_ctx.tk_popup(event.x_root, event.y_root)
+        finally:
+            self._step_ctx.grab_release()
 
     def _builder_spec(self) -> dict:
         return {

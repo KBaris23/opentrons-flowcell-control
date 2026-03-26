@@ -22,6 +22,10 @@ CHEMYX_DEFAULT_UNITS        = "uLmin"
 CHEMYX_DEFAULT_DIAMETER_MM  = 11.73
 CHEMYX_DEFAULT_RATE         = 1.0
 CHEMYX_DEFAULT_VOLUME       = 25.0
+COLLECTION_SYRINGE_CAPACITY_ML = 5.0
+COLLECTION_SYRINGE_WARN_FRACTION = 0.9
+FLOWCELL_FILL_VOLUME_UL = 225.0
+FLOWCELL_FILL_TARGET_S = 5.0
 
 # Common syringe inner diameters (ID) in mm.
 # These are typical values and can vary by manufacturer/model — verify your syringe datasheet.

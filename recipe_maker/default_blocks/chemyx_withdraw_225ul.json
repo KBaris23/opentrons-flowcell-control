@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 1350 (uLmin) | eta 10.0s",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 1350.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 10.0,
+          "track_collection": false,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    }
+  ]
+}

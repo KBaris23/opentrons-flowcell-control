@@ -12,13 +12,28 @@ This tab does not execute; it only composes recipe items for later use.
 import copy
 import json
 import hashlib
+import re
 from pathlib import Path
 from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk, simpledialog
 
 from methods import library_map
-from config import BLOCKS_DIR, OPENTRONS_PROTOCOLS_DIR
+from config import (
+    BLOCKS_DIR,
+    OPENTRONS_PROTOCOLS_DIR,
+    COLLECTION_SYRINGE_CAPACITY_ML,
+    FLOWCELL_FILL_VOLUME_UL,
+    FLOWCELL_FILL_TARGET_S,
+    SYRINGE_PRESETS_MM,
+)
+from core.pump_step_utils import (
+    build_pump_details,
+    default_collection_warn_ml,
+    estimate_eta_seconds,
+    rate_for_target_eta,
+    volume_to_ul,
+)
 from robot import OpentronsProtocolRunner
 
 
@@ -88,6 +103,8 @@ class RecipeMakerTab:
         ttk.Separator(ctrl, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(ctrl, text="Send to Queue",
                    command=self._send_to_queue).pack(side="left", padx=4)
+        self._lbl_collection_plan = ttk.Label(ctrl, text="Collection plan: 0 steps | 0.000 mL", foreground="#555")
+        self._lbl_collection_plan.pack(side="right", padx=4)
 
 
         # ── Recipe Treeview
@@ -167,6 +184,74 @@ class RecipeMakerTab:
         swatch.pack(side="left", padx=(8, 2))
         ttk.Label(parent, text=text).pack(side="left", padx=(0, 6))
 
+    @staticmethod
+    def _raw_var_text(var) -> str:
+        try:
+            return str(var._tk.globalgetvar(var._name))
+        except Exception:
+            try:
+                return str(var.get())
+            except Exception:
+                return ""
+
+    @classmethod
+    def _safe_float_var(cls, var, default: float = 0.0) -> float:
+        raw = cls._raw_var_text(var).strip()
+        if raw == "":
+            return float(default)
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return float(default)
+
+    @staticmethod
+    def _syringe_capacity_ml_from_label(label: str, default: float = COLLECTION_SYRINGE_CAPACITY_ML) -> float:
+        text = str(label or "").strip()
+        if not text or text.lower() == "custom":
+            return float(default)
+        match = re.match(r"^\s*(\d+(?:\.\d+)?)(?:/\d+(?:\.\d+)?)?\s*mL\b", text, flags=re.IGNORECASE)
+        if not match:
+            return float(default)
+        try:
+            return float(match.group(1))
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _computed_pump_values(
+        self,
+        *,
+        volume: float,
+        units: str,
+        target_eta_s: float,
+        syringe_label: str,
+    ) -> dict:
+        capacity_ml = self._syringe_capacity_ml_from_label(syringe_label, COLLECTION_SYRINGE_CAPACITY_ML)
+        warn_ml = default_collection_warn_ml(capacity_ml)
+        rate = rate_for_target_eta(volume, units, target_eta_s)
+        eta_s = estimate_eta_seconds(volume, rate or 0.0, units) if rate is not None else None
+        return {
+            "rate": rate,
+            "eta_s": eta_s,
+            "capacity_ml": capacity_ml,
+            "warn_ml": warn_ml,
+        }
+
+    def _refresh_recipe_pump_computed(self):
+        computed = self._computed_pump_values(
+            volume=self._safe_float_var(self._pump_volume, FLOWCELL_FILL_VOLUME_UL),
+            units=str(self._pump_units.get() or "uLmin"),
+            target_eta_s=self._safe_float_var(self._pump_target_eta_s, FLOWCELL_FILL_TARGET_S),
+            syringe_label=str(self._pump_syringe.get() or ""),
+        )
+        self._pump_collection_capacity_ml.set(float(computed["capacity_ml"]))
+        self._pump_collection_warn_ml.set(float(computed["warn_ml"]))
+        if computed["rate"] is None:
+            self._pump_rate_text.set("Calculated rate: -")
+        else:
+            self._pump_rate.set(float(computed["rate"]))
+            self._pump_rate_text.set(f"Calculated rate: {computed['rate']:.1f} {self._pump_units.get()}")
+        self._update_recipe_pump_eta_label()
+
     # ── Pump editor ────────────────────────────────────────────────────────
 
     def _build_pump_editor(self, parent):
@@ -222,7 +307,7 @@ class RecipeMakerTab:
         )
 
         ttk.Label(parent, text="Syringe preset:").grid(row=1, column=0, **pad, sticky="e")
-        self._pump_syringe = tk.StringVar(value="Custom")
+        self._pump_syringe = tk.StringVar(value="5 mL (typical)")
         syringe_values = ["Custom"] + sorted(SYRINGE_PRESETS_MM.keys())
         syringe_combo = ttk.Combobox(
             parent,
@@ -244,15 +329,19 @@ class RecipeMakerTab:
                 self._pump_diameter_mm.set(float(mm))
             except Exception:
                 pass
+            self._refresh_recipe_pump_computed()
 
         syringe_combo.bind("<<ComboboxSelected>>", _apply_preset)
         ttk.Label(parent, text="Tip: Diameter = syringe inner diameter (ID).", foreground="#666").grid(
             row=1, column=3, columnspan=5, padx=6, pady=4, sticky="w"
         )
 
-        ttk.Label(parent, text="Rate:").grid(row=2, column=0, **pad, sticky="e")
+        ttk.Label(parent, text="Calculated rate:").grid(row=2, column=0, **pad, sticky="e")
         self._pump_rate = tk.DoubleVar(value=1.0)
-        ttk.Entry(parent, width=10, textvariable=self._pump_rate).grid(row=2, column=1, **pad, sticky="w")
+        self._pump_rate_text = tk.StringVar(value="Calculated rate: -")
+        ttk.Label(parent, textvariable=self._pump_rate_text, foreground="#555").grid(
+            row=2, column=1, **pad, sticky="w"
+        )
 
         ttk.Label(parent, text="Volume:").grid(row=2, column=2, **pad, sticky="e")
         self._pump_volume = tk.DoubleVar(value=25.0)
@@ -266,46 +355,130 @@ class RecipeMakerTab:
         self._wait_seconds = tk.DoubleVar(value=10.0)
         ttk.Entry(parent, width=10, textvariable=self._wait_seconds).grid(row=2, column=7, **pad, sticky="w")
 
-        ttk.Label(parent, text="Raw cmd:").grid(row=3, column=0, **pad, sticky="e")
-        self._pump_raw_cmd = tk.StringVar(value="")
-        ttk.Entry(parent, width=60, textvariable=self._pump_raw_cmd).grid(
-            row=3, column=1, columnspan=7, **pad, sticky="w"
+        ttk.Label(parent, text="Target ETA (s):").grid(row=3, column=0, **pad, sticky="e")
+        self._pump_target_eta_s = tk.DoubleVar(value=FLOWCELL_FILL_TARGET_S)
+        ttk.Entry(parent, width=10, textvariable=self._pump_target_eta_s).grid(row=3, column=1, **pad, sticky="w")
+        ttk.Button(parent, text="Preset Flowcell Pull", command=self._apply_recipe_flowcell_pull_preset).grid(
+            row=3, column=2, columnspan=2, **pad, sticky="w"
         )
 
-        ttk.Label(parent, text="Alert message:").grid(row=4, column=0, **pad, sticky="e")
+        self._pump_track_collection = tk.BooleanVar(value=False)
+        ttk.Checkbutton(parent, text="Track collected volume", variable=self._pump_track_collection).grid(
+            row=3, column=5, columnspan=2, padx=6, pady=4, sticky="w"
+        )
+
+        ttk.Label(parent, text="Collection syringe:").grid(row=4, column=0, **pad, sticky="e")
+        self._pump_collection_capacity_ml = tk.DoubleVar(value=COLLECTION_SYRINGE_CAPACITY_ML)
+        self._pump_collection_text = tk.StringVar(value="Collection syringe: -")
+        ttk.Label(parent, textvariable=self._pump_collection_text, foreground="#555").grid(
+            row=4, column=1, columnspan=3, **pad, sticky="w"
+        )
+
+        self._pump_collection_warn_ml = tk.DoubleVar(value=default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML))
+
+        self._pump_eta_label = ttk.Label(parent, text="ETA: -", foreground="#555")
+        self._pump_eta_label.grid(row=4, column=4, columnspan=4, padx=6, pady=4, sticky="w")
+
+        ttk.Label(parent, text="Raw cmd:").grid(row=5, column=0, **pad, sticky="e")
+        self._pump_raw_cmd = tk.StringVar(value="")
+        ttk.Entry(parent, width=60, textvariable=self._pump_raw_cmd).grid(
+            row=5, column=1, columnspan=7, **pad, sticky="w"
+        )
+
+        ttk.Label(parent, text="Alert message:").grid(row=6, column=0, **pad, sticky="e")
         self._alert_message = tk.StringVar(value="Check setup")
         ttk.Entry(parent, width=60, textvariable=self._alert_message).grid(
-            row=4, column=1, columnspan=7, **pad, sticky="w"
+            row=6, column=1, columnspan=7, **pad, sticky="w"
         )
 
         ttk.Label(
             parent,
             text="Tip: Only relevant fields are used based on action type.",
             foreground="#666",
-        ).grid(row=5, column=0, columnspan=8, padx=6, pady=(0, 6), sticky="w")
+        ).grid(row=7, column=0, columnspan=8, padx=6, pady=(0, 6), sticky="w")
+
+        for var in (
+            self._pump_units,
+            self._pump_volume,
+            self._pump_target_eta_s,
+            self._pump_track_collection,
+        ):
+            try:
+                var.trace_add("write", lambda *_: self._refresh_recipe_pump_computed())
+            except Exception:
+                pass
+        _apply_preset()
+        self._refresh_recipe_pump_computed()
 
     def _add_pump_step(self):
         action = self._pump_action.get().strip().upper()
         if not action:
             return
         try:
+            computed = self._computed_pump_values(
+                volume=self._safe_float_var(self._pump_volume, FLOWCELL_FILL_VOLUME_UL),
+                units=str(self._pump_units.get() or "uLmin"),
+                target_eta_s=self._safe_float_var(self._pump_target_eta_s, FLOWCELL_FILL_TARGET_S),
+                syringe_label=str(self._pump_syringe.get() or ""),
+            )
             item = self._build_pump_item(
                 action=action,
                 units=str(self._pump_units.get()),
                 mode=str(self._pump_mode.get()),
-                diameter_mm=float(self._pump_diameter_mm.get()),
-                rate=float(self._pump_rate.get()),
-                volume=float(self._pump_volume.get()),
-                delay_min=float(self._pump_delay_min.get()),
+                diameter_mm=self._safe_float_var(self._pump_diameter_mm, 11.73),
+                rate=float(computed["rate"] or 0.0),
+                volume=self._safe_float_var(self._pump_volume, FLOWCELL_FILL_VOLUME_UL),
+                delay_min=self._safe_float_var(self._pump_delay_min, 0.0),
                 cmd=(self._pump_raw_cmd.get() or "").strip(),
-                wait=float(self._wait_seconds.get()),
+                wait=self._safe_float_var(self._wait_seconds, 10.0),
                 alert=(self._alert_message.get() or "").strip(),
+                target_eta_s=self._safe_float_var(self._pump_target_eta_s, FLOWCELL_FILL_TARGET_S),
+                track_collection=bool(self._pump_track_collection.get()),
+                collection_capacity_ml=float(computed["capacity_ml"]),
+                collection_warn_ml=float(computed["warn_ml"]),
             )
         except Exception as exc:
             messagebox.showerror("Invalid pump step", str(exc))
             return
         self._recipe.append(item)
         self._refresh()
+
+    def _apply_recipe_flowcell_pull_preset(self):
+        self._pump_action.set("HEXW2")
+        self._pump_units.set("uLmin")
+        self._pump_mode.set("withdraw")
+        self._pump_volume.set(float(FLOWCELL_FILL_VOLUME_UL))
+        self._pump_target_eta_s.set(float(FLOWCELL_FILL_TARGET_S))
+        self._pump_track_collection.set(True)
+        try:
+            self._pump_syringe.set("5 mL (typical)")
+            self._pump_diameter_mm.set(float(SYRINGE_PRESETS_MM["5 mL (typical)"]))
+        except Exception:
+            pass
+        self._refresh_recipe_pump_computed()
+
+    def _update_recipe_pump_eta_label(self):
+        units = str(self._pump_units.get() or "uLmin")
+        volume = self._safe_float_var(self._pump_volume, 0.0)
+        rate = self._safe_float_var(self._pump_rate, 0.0)
+        eta_s = estimate_eta_seconds(
+            volume,
+            rate,
+            units,
+        )
+        if eta_s is None:
+            self._pump_eta_label.configure(text="ETA: -")
+        else:
+            extra = ""
+            if bool(self._pump_track_collection.get()):
+                volume_ul = volume_to_ul(volume, units)
+                if volume_ul is not None:
+                    extra = f" | collect {volume_ul / 1000.0:.3f} mL"
+            self._pump_eta_label.configure(text=f"ETA: {eta_s:.1f}s{extra}")
+
+        capacity_ml = self._safe_float_var(self._pump_collection_capacity_ml, COLLECTION_SYRINGE_CAPACITY_ML)
+        warn_ml = self._safe_float_var(self._pump_collection_warn_ml, default_collection_warn_ml(capacity_ml))
+        self._pump_collection_text.set(f"Collection syringe: {capacity_ml:g} mL | warning at {warn_ml:g} mL")
 
     # ── Method library ─────────────────────────────────────────────────────
 
@@ -468,6 +641,18 @@ class RecipeMakerTab:
 
         self._load_opentrons_protocols()
 
+    def _opentrons_protocol_label(self, path: Path, root: Path) -> str:
+        try:
+            rel = str(path.relative_to(root))
+        except ValueError:
+            rel = path.name
+        try:
+            summary = self._opentrons_runner.inspect_protocol(path)
+            name = (summary.protocol_name or "").strip() or path.stem
+        except Exception:
+            name = path.stem
+        return f"{name} | {rel}"
+
     def _load_opentrons_protocols(self):
         proto_dir = Path(OPENTRONS_PROTOCOLS_DIR)
         proto_dir.mkdir(parents=True, exist_ok=True)
@@ -475,10 +660,7 @@ class RecipeMakerTab:
         self._opentrons_protocol_map.clear()
         labels = []
         for path in files:
-            try:
-                label = str(path.relative_to(proto_dir))
-            except ValueError:
-                label = path.name
+            label = self._opentrons_protocol_label(path, proto_dir)
             labels.append(label)
             self._opentrons_protocol_map[label] = path
         self._opentrons_combo.configure(values=labels)
@@ -764,6 +946,27 @@ class RecipeMakerTab:
                 ),
                 tags=(tag,),
             )
+        self._refresh_collection_summary()
+
+    def _refresh_collection_summary(self):
+        total_ul = 0.0
+        steps = 0
+        for item in self._recipe:
+            item_type = str(item.get("type") or "").upper()
+            if not item_type.startswith("PUMP_"):
+                continue
+            action = item.get("pump_action") or {}
+            params = action.get("params") or {}
+            if not bool(params.get("track_collection")):
+                continue
+            volume_ul = volume_to_ul(params.get("volume"), params.get("units", ""))
+            if volume_ul is None:
+                continue
+            total_ul += max(0.0, volume_ul)
+            steps += 1
+        self._lbl_collection_plan.configure(
+            text=f"Collection plan: {steps} steps | {total_ul / 1000.0:.3f} mL"
+        )
 
     def _selected_indices(self):
         return sorted(
@@ -904,6 +1107,10 @@ class RecipeMakerTab:
         cmd: str,
         wait: float,
         alert: str,
+        target_eta_s: float,
+        track_collection: bool,
+        collection_capacity_ml: float,
+        collection_warn_ml: float,
     ) -> dict:
         action = (action or "").strip().upper()
         if not action:
@@ -928,17 +1135,16 @@ class RecipeMakerTab:
                 "alert_message": msg,
             }
 
-        details = ""
         pump_action = {"name": action, "params": {}}
 
         if action == "COMMAND":
             if not cmd:
                 raise ValueError("Raw cmd cannot be empty for COMMAND action.")
-            details = f"Pump cmd: {cmd}"
             pump_action["params"] = {"cmd": cmd}
 
         elif action == "APPLY":
-            details = f"Pump: Apply ({units}, {mode}, Ø{diameter_mm:g}mm)"
+            if float(rate) <= 0:
+                raise ValueError("Calculated pump rate is invalid. Check volume, units, and ETA.")
             pump_action["params"] = {
                 "units": units,
                 "mode": mode,
@@ -948,7 +1154,8 @@ class RecipeMakerTab:
             }
 
         elif action == "HEXW2":
-            details = f"Pump: HEXW2 {mode} {volume:g} @ {rate:g} ({units})"
+            if float(rate) <= 0:
+                raise ValueError("Calculated pump rate is invalid. Check volume, units, and ETA.")
             pump_action["params"] = {
                 "units": units,
                 "mode": mode,
@@ -957,10 +1164,13 @@ class RecipeMakerTab:
                 "rate": float(rate),
                 "delay_min": float(delay_min),
                 "start": True,
+                "target_eta_s": float(target_eta_s),
+                "track_collection": bool(track_collection),
+                "collection_capacity_ml": float(collection_capacity_ml),
+                "collection_warn_ml": float(collection_warn_ml),
             }
 
         elif action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT"}:
-            details = f"Pump: {action.replace('_', ' ').title()}"
             pump_action["params"] = {}
 
         else:
@@ -969,7 +1179,7 @@ class RecipeMakerTab:
         return {
             "type": f"PUMP_{action}",
             "status": "pending",
-            "details": details,
+            "details": build_pump_details(action, pump_action["params"]),
             "pump_action": pump_action,
         }
 
@@ -995,43 +1205,7 @@ class RecipeMakerTab:
             action_info = item.get("pump_action") or {}
             name = str(action_info.get("name") or item_type.replace("PUMP_", "")).upper()
             params = action_info.get("params") or {}
-
-            if name == "COMMAND":
-                cmd = str(params.get("cmd") or "").strip()
-                item["details"] = f"Pump cmd: {cmd}" if cmd else "Pump cmd"
-                continue
-
-            if name == "APPLY":
-                units = str(params.get("units") or "")
-                mode = str(params.get("mode") or "")
-                diam = params.get("diameter_mm")
-                try:
-                    diam_s = f"{float(diam):g}mm" if diam is not None else "?mm"
-                except Exception:
-                    diam_s = "?mm"
-                item["details"] = f"Pump: Apply ({units}, {mode}, Ø{diam_s})"
-                continue
-
-            if name == "HEXW2":
-                units = str(params.get("units") or "")
-                mode = str(params.get("mode") or "")
-                try:
-                    volume = float(params.get("volume"))
-                except Exception:
-                    volume = None
-                try:
-                    rate = float(params.get("rate"))
-                except Exception:
-                    rate = None
-                if volume is None or rate is None:
-                    item["details"] = f"Pump: HEXW2 ({mode})"
-                else:
-                    item["details"] = f"Pump: HEXW2 {mode} {volume:g} @ {rate:g} ({units})"
-                continue
-
-            if name in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT"}:
-                item["details"] = f"Pump: {name.replace('_', ' ').title()}"
-                continue
+            item["details"] = build_pump_details(name, params)
 
     def _on_tree_double_click(self, event):
         row = self._tree.identify_row(event.y)
@@ -1066,6 +1240,10 @@ class RecipeMakerTab:
                 "cmd": "",
                 "wait": float(item.get("pause_seconds", 10.0)),
                 "alert": "Check setup",
+                "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
+                "track_collection": False,
+                "collection_capacity_ml": float(COLLECTION_SYRINGE_CAPACITY_ML),
+                "collection_warn_ml": float(default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML)),
             }
         if item_type == "ALERT":
             return {
@@ -1079,6 +1257,10 @@ class RecipeMakerTab:
                 "cmd": "",
                 "wait": 10.0,
                 "alert": str(item.get("alert_message") or ""),
+                "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
+                "track_collection": False,
+                "collection_capacity_ml": float(COLLECTION_SYRINGE_CAPACITY_ML),
+                "collection_warn_ml": float(default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML)),
             }
 
         action_info = item.get("pump_action") or {}
@@ -1095,6 +1277,10 @@ class RecipeMakerTab:
             "cmd": str(params.get("cmd", "")),
             "wait": 10.0,
             "alert": "Check setup",
+            "target_eta_s": float(params.get("target_eta_s", FLOWCELL_FILL_TARGET_S)),
+            "track_collection": bool(params.get("track_collection", False)),
+            "collection_capacity_ml": float(params.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)),
+            "collection_warn_ml": float(params.get("collection_warn_ml", default_collection_warn_ml(params.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)))),
         }
 
     def _edit_pump_step(self, index: int):
@@ -1154,8 +1340,11 @@ class RecipeMakerTab:
         diameter_var = tk.DoubleVar(value=fields["diameter_mm"])
         ttk.Entry(win, width=10, textvariable=diameter_var).grid(row=0, column=7, **pad, sticky="w")
 
+        preferred_syringe = "Custom"
+        if abs(float(fields["collection_capacity_ml"]) - 5.0) < 0.01:
+            preferred_syringe = "5 mL (typical)"
         ttk.Label(win, text="Syringe preset:").grid(row=2, column=0, **pad, sticky="e")
-        syringe_var = tk.StringVar(value="Custom")
+        syringe_var = tk.StringVar(value=preferred_syringe)
         syringe_values = ["Custom"] + sorted(SYRINGE_PRESETS_MM.keys())
         syringe_combo = ttk.Combobox(
             win,
@@ -1180,12 +1369,16 @@ class RecipeMakerTab:
                 diameter_var.set(float(mm))
             except Exception:
                 pass
+            _refresh_popup_computed()
 
         syringe_combo.bind("<<ComboboxSelected>>", _apply_preset)
 
-        ttk.Label(win, text="Rate:").grid(row=1, column=0, **pad, sticky="e")
+        ttk.Label(win, text="Calculated rate:").grid(row=1, column=0, **pad, sticky="e")
         rate_var = tk.DoubleVar(value=fields["rate"])
-        ttk.Entry(win, width=10, textvariable=rate_var).grid(row=1, column=1, **pad, sticky="w")
+        rate_text_var = tk.StringVar(value="Calculated rate: -")
+        ttk.Label(win, textvariable=rate_text_var, foreground="#555").grid(
+            row=1, column=1, **pad, sticky="w"
+        )
 
         ttk.Label(win, text="Volume:").grid(row=1, column=2, **pad, sticky="e")
         volume_var = tk.DoubleVar(value=fields["volume"])
@@ -1199,16 +1392,95 @@ class RecipeMakerTab:
         wait_var = tk.DoubleVar(value=fields["wait"])
         ttk.Entry(win, width=10, textvariable=wait_var).grid(row=1, column=7, **pad, sticky="w")
 
-        ttk.Label(win, text="Raw cmd:").grid(row=3, column=0, **pad, sticky="e")
-        cmd_var = tk.StringVar(value=fields["cmd"])
-        ttk.Entry(win, width=60, textvariable=cmd_var).grid(row=3, column=1, columnspan=7, **pad, sticky="w")
+        ttk.Label(win, text="Target ETA (s):").grid(row=3, column=0, **pad, sticky="e")
+        target_eta_var = tk.DoubleVar(value=fields["target_eta_s"])
+        ttk.Entry(win, width=10, textvariable=target_eta_var).grid(row=3, column=1, **pad, sticky="w")
 
-        ttk.Label(win, text="Alert message:").grid(row=4, column=0, **pad, sticky="e")
+        def _apply_flowcell_preset():
+            action_var.set("HEXW2")
+            units_var.set("uLmin")
+            mode_var.set("withdraw")
+            volume_var.set(float(FLOWCELL_FILL_VOLUME_UL))
+            target_eta_var.set(float(FLOWCELL_FILL_TARGET_S))
+            track_collection_var.set(True)
+            try:
+                syringe_var.set("5 mL (typical)")
+                diameter_var.set(float(SYRINGE_PRESETS_MM["5 mL (typical)"]))
+            except Exception:
+                pass
+            _refresh_popup_computed()
+
+        ttk.Button(win, text="Preset Flowcell Pull", command=_apply_flowcell_preset).grid(
+            row=3, column=2, columnspan=2, **pad, sticky="w"
+        )
+
+        track_collection_var = tk.BooleanVar(value=fields["track_collection"])
+        ttk.Checkbutton(win, text="Track collected volume", variable=track_collection_var).grid(
+            row=3, column=5, columnspan=2, padx=6, pady=4, sticky="w"
+        )
+
+        capacity_var = tk.DoubleVar(value=fields["collection_capacity_ml"])
+        warn_var = tk.DoubleVar(value=fields["collection_warn_ml"])
+        collection_text_var = tk.StringVar(value="Collection syringe: -")
+        ttk.Label(win, text="Collection syringe:").grid(row=4, column=0, **pad, sticky="e")
+        ttk.Label(win, textvariable=collection_text_var, foreground="#555").grid(
+            row=4, column=1, columnspan=3, **pad, sticky="w"
+        )
+
+        eta_label = ttk.Label(win, text="ETA: -", foreground="#555")
+        eta_label.grid(row=4, column=4, columnspan=4, padx=6, pady=4, sticky="w")
+
+        def _update_eta_label(*_args):
+            eta_s = estimate_eta_seconds(
+                self._safe_float_var(volume_var, 0.0),
+                self._safe_float_var(rate_var, 0.0),
+                units_var.get(),
+            )
+            if eta_s is None:
+                eta_label.configure(text="ETA: -")
+                return
+            extra = ""
+            if bool(track_collection_var.get()):
+                volume_ul = volume_to_ul(self._safe_float_var(volume_var, 0.0), units_var.get())
+                if volume_ul is not None:
+                    extra = f" | collect {volume_ul / 1000.0:.3f} mL"
+            eta_label.configure(text=f"ETA: {eta_s:.1f}s{extra}")
+
+        def _refresh_popup_computed(*_args):
+            computed = self._computed_pump_values(
+                volume=self._safe_float_var(volume_var, FLOWCELL_FILL_VOLUME_UL),
+                units=str(units_var.get() or "uLmin"),
+                target_eta_s=self._safe_float_var(target_eta_var, FLOWCELL_FILL_TARGET_S),
+                syringe_label=str(syringe_var.get() or ""),
+            )
+            capacity_var.set(float(computed["capacity_ml"]))
+            warn_var.set(float(computed["warn_ml"]))
+            if computed["rate"] is None:
+                rate_text_var.set("Calculated rate: -")
+            else:
+                rate_var.set(float(computed["rate"]))
+                rate_text_var.set(f"Calculated rate: {computed['rate']:.1f} {units_var.get()}")
+            collection_text_var.set(f"{computed['capacity_ml']:g} mL | warning at {computed['warn_ml']:g} mL")
+            _update_eta_label()
+
+        for var in (units_var, volume_var, target_eta_var, track_collection_var, syringe_var):
+            try:
+                var.trace_add("write", _refresh_popup_computed)
+            except Exception:
+                pass
+        _apply_preset()
+        _refresh_popup_computed()
+
+        ttk.Label(win, text="Raw cmd:").grid(row=5, column=0, **pad, sticky="e")
+        cmd_var = tk.StringVar(value=fields["cmd"])
+        ttk.Entry(win, width=60, textvariable=cmd_var).grid(row=5, column=1, columnspan=7, **pad, sticky="w")
+
+        ttk.Label(win, text="Alert message:").grid(row=6, column=0, **pad, sticky="e")
         alert_var = tk.StringVar(value=fields["alert"])
-        ttk.Entry(win, width=60, textvariable=alert_var).grid(row=4, column=1, columnspan=7, **pad, sticky="w")
+        ttk.Entry(win, width=60, textvariable=alert_var).grid(row=6, column=1, columnspan=7, **pad, sticky="w")
 
         btns = ttk.Frame(win)
-        btns.grid(row=5, column=0, columnspan=8, pady=(6, 8))
+        btns.grid(row=7, column=0, columnspan=8, pady=(6, 8))
 
         def _apply():
             try:
@@ -1216,13 +1488,20 @@ class RecipeMakerTab:
                     action=action_var.get(),
                     units=str(units_var.get()),
                     mode=str(mode_var.get()),
-                    diameter_mm=float(diameter_var.get()),
-                    rate=float(rate_var.get()),
-                    volume=float(volume_var.get()),
-                    delay_min=float(delay_var.get()),
+                    diameter_mm=self._safe_float_var(diameter_var, 11.73),
+                    rate=self._safe_float_var(rate_var, 0.0),
+                    volume=self._safe_float_var(volume_var, FLOWCELL_FILL_VOLUME_UL),
+                    delay_min=self._safe_float_var(delay_var, 0.0),
                     cmd=(cmd_var.get() or "").strip(),
-                    wait=float(wait_var.get()),
+                    wait=self._safe_float_var(wait_var, 10.0),
                     alert=(alert_var.get() or "").strip(),
+                    target_eta_s=self._safe_float_var(target_eta_var, FLOWCELL_FILL_TARGET_S),
+                    track_collection=bool(track_collection_var.get()),
+                    collection_capacity_ml=self._safe_float_var(capacity_var, COLLECTION_SYRINGE_CAPACITY_ML),
+                    collection_warn_ml=self._safe_float_var(
+                        warn_var,
+                        default_collection_warn_ml(self._safe_float_var(capacity_var, COLLECTION_SYRINGE_CAPACITY_ML)),
+                    ),
                 )
             except Exception as exc:
                 messagebox.showerror("Invalid pump step", str(exc))
