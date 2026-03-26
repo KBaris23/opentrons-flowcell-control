@@ -21,6 +21,8 @@ from tkinter import ttk, simpledialog
 from methods import library_map
 from config import (
     BLOCKS_DIR,
+    OPENTRONS_DEFAULT_API_PORT,
+    OPENTRONS_DEFAULT_HOST,
     OPENTRONS_PROTOCOLS_DIR,
     COLLECTION_SYRINGE_CAPACITY_ML,
     FLOWCELL_FILL_VOLUME_UL,
@@ -273,6 +275,7 @@ class RecipeMakerTab:
                 "RESTART",
                 "STATUS",
                 "STATUS_PORT",
+                "STATE_RESET",
                 "WAIT",
                 "ALERT",
             ],
@@ -396,6 +399,10 @@ class RecipeMakerTab:
             text="Tip: Only relevant fields are used based on action type.",
             foreground="#666",
         ).grid(row=7, column=0, columnspan=8, padx=6, pady=(0, 6), sticky="w")
+
+        ttk.Button(parent, text="Add Syringe State Reset", command=self._add_recipe_state_reset_step).grid(
+            row=8, column=0, columnspan=2, padx=6, pady=(0, 6), sticky="w"
+        )
 
         for var in (
             self._pump_units,
@@ -624,10 +631,19 @@ class RecipeMakerTab:
         self._opentrons_name_var = tk.StringVar(value="")
         ttk.Entry(form, textvariable=self._opentrons_name_var, width=30).grid(row=1, column=3, **pad, sticky="w")
 
+        ttk.Label(form, text="Robot host/IP:").grid(row=2, column=0, **pad, sticky="e")
+        self._opentrons_robot_host_var = tk.StringVar(value=str(OPENTRONS_DEFAULT_HOST))
+        ttk.Entry(form, textvariable=self._opentrons_robot_host_var, width=24).grid(row=2, column=1, **pad, sticky="w")
+
+        ttk.Label(form, text="Robot API port:").grid(row=2, column=2, **pad, sticky="e")
+        self._opentrons_robot_port_var = tk.StringVar(value=str(int(OPENTRONS_DEFAULT_API_PORT)))
+        ttk.Entry(form, textvariable=self._opentrons_robot_port_var, width=10).grid(row=2, column=3, **pad, sticky="w")
+
         btns = ttk.Frame(parent)
         btns.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(btns, text="Add Protocol Step", command=self._add_opentrons_protocol_step).pack(side="left", padx=4)
         ttk.Button(btns, text="Add Resume Step", command=self._add_opentrons_resume_step).pack(side="left", padx=4)
+        ttk.Button(btns, text="Add Home Step", command=self._add_opentrons_home_step).pack(side="left", padx=4)
 
         hint = ttk.Label(
             parent,
@@ -715,10 +731,22 @@ class RecipeMakerTab:
         payload = f"{protocol_name}\n{source_text or ''}"
         return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
+    def _current_opentrons_robot_target(self) -> tuple[str, int]:
+        host = (self._opentrons_robot_host_var.get() or "").strip()
+        if not host:
+            raise ValueError("Enter the OT-2 host/IP first.")
+        raw = (self._opentrons_robot_port_var.get() or str(int(OPENTRONS_DEFAULT_API_PORT))).strip()
+        try:
+            port = int(raw) if raw else int(OPENTRONS_DEFAULT_API_PORT)
+        except ValueError as exc:
+            raise ValueError(f"Invalid OT-2 API port: {raw}") from exc
+        return host, port
+
     def _add_opentrons_protocol_step(self):
         try:
             path, protocol_name, source = self._current_opentrons_protocol()
             summary = self._opentrons_runner.inspect_protocol(path)
+            robot_host, robot_port = self._current_opentrons_robot_target()
         except Exception as exc:
             messagebox.showerror("Invalid Protocol", str(exc))
             return
@@ -736,8 +764,11 @@ class RecipeMakerTab:
                     "mode": mode,
                     "protocol_name": protocol_name,
                     "protocol_path": str(path),
+                    "protocol_source": source,
                     "resume_key": self._opentrons_resume_key(protocol_name, source),
                     "supports_pause": bool(summary.has_pause),
+                    "robot_host": robot_host,
+                    "robot_port": robot_port,
                 },
             },
         }
@@ -759,6 +790,38 @@ class RecipeMakerTab:
                 "params": {
                     "protocol_name": protocol_name,
                     "resume_key": self._opentrons_resume_key(protocol_name, source),
+                },
+            },
+        }
+        self._recipe.append(item)
+        self._refresh()
+
+    def _add_recipe_state_reset_step(self):
+        self._recipe.append(
+            {
+                "type": "PUMP_STATE_RESET",
+                "status": "pending",
+                "details": build_pump_details("STATE_RESET", {}),
+                "pump_action": {"name": "STATE_RESET", "params": {}},
+            }
+        )
+        self._refresh()
+
+    def _add_opentrons_home_step(self):
+        try:
+            host, port = self._current_opentrons_robot_target()
+        except Exception as exc:
+            messagebox.showerror("Invalid OT-2 Target", str(exc))
+            return
+        item = {
+            "type": "OPENTRONS_HOME",
+            "status": "pending",
+            "details": f"Opentrons HOME {host}",
+            "opentrons_action": {
+                "name": "HOME",
+                "params": {
+                    "robot_host": host,
+                    "robot_port": port,
                 },
             },
         }
@@ -1116,6 +1179,13 @@ class RecipeMakerTab:
         if not action:
             raise ValueError("Pump action is required.")
 
+        if action == "STATE_RESET":
+            return {
+                "type": "PUMP_STATE_RESET",
+                "status": "pending",
+                "details": build_pump_details(action, {}),
+                "pump_action": {"name": action, "params": {}},
+            }
         if action == "WAIT":
             seconds = float(wait)
             return {
@@ -1170,7 +1240,7 @@ class RecipeMakerTab:
                 "collection_warn_ml": float(collection_warn_ml),
             }
 
-        elif action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT"}:
+        elif action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT", "STATE_RESET"}:
             pump_action["params"] = {}
 
         else:
@@ -1309,6 +1379,7 @@ class RecipeMakerTab:
                 "RESTART",
                 "STATUS",
                 "STATUS_PORT",
+                "STATE_RESET",
                 "WAIT",
                 "ALERT",
             ],

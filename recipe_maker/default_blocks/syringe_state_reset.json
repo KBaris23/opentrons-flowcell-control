@@ -1,0 +1,14 @@
+{
+  "name": "Syringe State Reset",
+  "items": [
+    {
+      "type": "PUMP_STATE_RESET",
+      "status": "pending",
+      "details": "Syringe state reset",
+      "pump_action": {
+        "name": "STATE_RESET",
+        "params": {}
+      }
+    }
+  ]
+}

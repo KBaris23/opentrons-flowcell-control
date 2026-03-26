@@ -24,6 +24,8 @@ from typing import Optional
 
 from config import (
     OPENTRONS_PROTOCOLS_DIR,
+    OPENTRONS_DEFAULT_API_PORT,
+    OPENTRONS_DEFAULT_HOST,
     COLLECTION_SYRINGE_CAPACITY_ML,
     FLOWCELL_FILL_VOLUME_UL,
     FLOWCELL_FILL_TARGET_S,
@@ -75,6 +77,7 @@ class QueueTab:
         self._last_selected    = None
         self._last_queue_path  = None
         self._opentrons_paused_runs: dict[str, dict] = {}
+        self._active_opentrons_target: dict[str, str | int | None] | None = None
 
         self._build()
 
@@ -168,6 +171,8 @@ class QueueTab:
         self._lbl_collection.pack(side="left", padx=8)
         ttk.Button(info_bar, text="Reset Counter",
                    command=self._reset_counter).pack(side="right", padx=4)
+        ttk.Button(info_bar, text="Reset Syringe State",
+                   command=self._reset_syringe_state).pack(side="right", padx=4)
         ttk.Button(info_bar, text="Clear Registry",
                    command=self._clear_registry).pack(side="right", padx=4)
 
@@ -180,7 +185,7 @@ class QueueTab:
     def add_item(self, item: dict):
         """Append a queue item dict and refresh the display."""
         prepared = item
-        if isinstance(item, dict) and "script_path" not in item and "method_ref" in item:
+        if isinstance(item, dict):
             resolved = self._deserialize(item)
             if resolved is not None:
                 prepared = resolved
@@ -246,6 +251,17 @@ class QueueTab:
     def _clear_registry(self):
         self._session.registry.clear()
         self.refresh_labels()
+
+    def _reset_syringe_state(self):
+        if not messagebox.askyesno(
+            "Reset Syringe State",
+            "Reset the persistent syringe state to 0 mL?\n"
+            "Use this after the collection syringe has been emptied.",
+        ):
+            return
+        self._session.reset_collection_tracking(reason="manual ui reset")
+        self.refresh_labels()
+        self.log("Syringe state reset to 0 mL.")
 
     # ── Copy / paste / duplicate ──────────────────────────────────────────────
 
@@ -461,6 +477,13 @@ class QueueTab:
         if not action:
             raise ValueError("Pump action is required.")
 
+        if action == "STATE_RESET":
+            return {
+                "type": "PUMP_STATE_RESET",
+                "status": "pending",
+                "details": build_pump_details(action, {}),
+                "pump_action": {"name": action, "params": {}},
+            }
         if action == "WAIT":
             seconds = float(fields.get("wait", 0.0))
             return {
@@ -508,7 +531,7 @@ class QueueTab:
                 "collection_capacity_ml": float(fields.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)),
                 "collection_warn_ml": float(fields.get("collection_warn_ml", default_collection_warn_ml(fields.get("collection_capacity_ml", COLLECTION_SYRINGE_CAPACITY_ML)))),
             }
-        elif action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT"}:
+        elif action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT", "STATE_RESET"}:
             params = {}
         else:
             raise ValueError(f"Unsupported pump action: {action}")
@@ -552,6 +575,7 @@ class QueueTab:
                 "RESTART",
                 "STATUS",
                 "STATUS_PORT",
+                "STATE_RESET",
                 "WAIT",
                 "ALERT",
             ],
@@ -921,7 +945,17 @@ class QueueTab:
                 protocol_label = protocol_label or "Opentrons protocol"
                 item["opentrons_action"] = {"name": action_name, "params": params}
                 item["details"] = details or f"Opentrons RESUME {protocol_label}"
-            else:
+            elif action_name == "HOME":
+                host = str(params.get("robot_host") or "").strip()
+                if not host:
+                    return None
+                try:
+                    params["robot_port"] = int(params.get("robot_port") or 31950)
+                except Exception:
+                    return None
+                item["opentrons_action"] = {"name": action_name, "params": params}
+                item["details"] = details or f"Opentrons HOME {host}"
+            elif action_name == "PROTOCOL":
                 protocol_path = params.get("protocol_path")
                 protocol_source = params.get("protocol_source")
                 if not protocol_path and not protocol_source:
@@ -935,8 +969,16 @@ class QueueTab:
                     protocol_label = protocol_label or resolved.name
                 else:
                     protocol_label = protocol_label or "inline protocol"
+                if mode == "robot":
+                    params["robot_host"] = str(params.get("robot_host") or OPENTRONS_DEFAULT_HOST).strip()
+                    try:
+                        params["robot_port"] = int(params.get("robot_port") or OPENTRONS_DEFAULT_API_PORT)
+                    except Exception:
+                        return None
                 item["opentrons_action"] = {"name": action_name, "params": params}
                 item["details"] = details or f"Opentrons {mode.upper()} {protocol_label}"
+            else:
+                return None
         else:
             sp = raw.get("script_path")
             method_ref = raw.get("method_ref") or {}
@@ -1056,6 +1098,17 @@ class QueueTab:
                 resolved = candidate
             if resolved.exists():
                 return resolved
+        proto_root = Path(OPENTRONS_PROTOCOLS_DIR)
+        if proto_root.exists():
+            target_names = {raw.name.lower(), raw.stem.lower(), str(protocol_path).strip().lower()}
+            for candidate in proto_root.rglob("*.py"):
+                name = candidate.name.lower()
+                stem = candidate.stem.lower()
+                if name in target_names or stem in target_names:
+                    try:
+                        return candidate.resolve()
+                    except Exception:
+                        return candidate
         return None
 
     @staticmethod
@@ -1162,11 +1215,16 @@ class QueueTab:
             current_label="(starting)",
             started_at=datetime.now().isoformat(timespec="seconds"),
         )
-        self._session.reset_collection_tracking()
         self.refresh_labels()
         self.clear_log()
         self.log("Queue start requested.")
         self.log(f"Measurement simulation: {'ON' if self._session.simulate_measurements else 'OFF'}")
+        self.log(
+            "Loaded syringe state: "
+            f"{self._session.collection_steps} step(s), "
+            f"{self._session.collection_volume_ul / 1000.0:.3f} / "
+            f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
+        )
         self._announce_queue_start(start_index=0)
         self._copy_queue_file("run_queue")
         self._queue_thread = threading.Thread(
@@ -1203,11 +1261,16 @@ class QueueTab:
             current_label="(starting)",
             started_at=datetime.now().isoformat(timespec="seconds"),
         )
-        self._session.reset_collection_tracking()
         self.refresh_labels()
         self.clear_log()
         self.log("Queue start from selected requested.")
         self.log(f"Measurement simulation: {'ON' if self._session.simulate_measurements else 'OFF'}")
+        self.log(
+            "Loaded syringe state: "
+            f"{self._session.collection_steps} step(s), "
+            f"{self._session.collection_volume_ul / 1000.0:.3f} / "
+            f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
+        )
         self._announce_queue_start(start_index=idx)
         self._copy_queue_file("run_queue_from_selected")
         self._queue_thread = threading.Thread(
@@ -1242,6 +1305,7 @@ class QueueTab:
         # Always try to force pump out of motion on stop. Run in background to
         # keep the UI responsive if serial calls take up to timeout.
         threading.Thread(target=self._force_stop_and_restart_pump, daemon=True).start()
+        threading.Thread(target=self._stop_and_home_opentrons, daemon=True).start()
 
         if not queue_was_running:
             self._session.update_queue_status(state="stopped")
@@ -1277,6 +1341,53 @@ class QueueTab:
         finally:
             self._session.update_queue_status(state="stopped")
             self._root.after(0, self.set_status, "Queue Stopped")
+
+    def _stop_and_home_opentrons(self) -> None:
+        targets: list[tuple[str, int, str | None]] = []
+        seen: set[tuple[str, int, str | None]] = set()
+
+        active = self._active_opentrons_target or {}
+        active_host = str(active.get("robot_host") or "").strip()
+        active_run_id = str(active.get("run_id") or "").strip() or None
+        try:
+            active_port = int(active.get("robot_port") or 31950)
+        except Exception:
+            active_port = 31950
+        if active_host:
+            key = (active_host, active_port, active_run_id)
+            seen.add(key)
+            targets.append(key)
+
+        for paused in self._opentrons_paused_runs.values():
+            host = str(paused.get("robot_host") or "").strip()
+            run_id = str(paused.get("run_id") or "").strip() or None
+            if not host:
+                continue
+            try:
+                port = int(paused.get("robot_port") or 31950)
+            except Exception:
+                port = 31950
+            key = (host, port, run_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            targets.append(key)
+
+        if not targets:
+            return
+
+        runner = OpentronsProtocolRunner(log_callback=self.log)
+        for host, port, run_id in targets:
+            if run_id:
+                runner.stop_run(robot_host=host, robot_port=port, run_id=run_id)
+                time.sleep(1.0)
+            else:
+                runner.stop_active_runs(robot_host=host, robot_port=port)
+                time.sleep(1.0)
+            runner.home_robot(robot_host=host, robot_port=port)
+
+        self._opentrons_paused_runs.clear()
+        self._active_opentrons_target = None
 
     def _execute_queue(self, start_index: int = 0):
         queue = list(self._session.measurement_queue)
@@ -1315,7 +1426,14 @@ class QueueTab:
                     success = ok
 
                 elif t.startswith("PUMP_"):
-                    ok = self._exec_pump(item)
+                    action_name = str((item.get("pump_action") or {}).get("name") or "").upper()
+                    if action_name == "STATE_RESET":
+                        self._session.reset_collection_tracking(reason="queue state reset step")
+                        self.log("Syringe state reset to 0 mL.")
+                        self._root.after(0, self.refresh_labels)
+                        ok = True
+                    else:
+                        ok = self._exec_pump(item)
                     self._session.measurement_queue[i]["status"] = "completed" if ok else "failed"
                     success = ok
 
@@ -1594,9 +1712,14 @@ class QueueTab:
         params      = action_info.get("params") or {}
         details     = item.get("details", f"Pump {name}")
         collection_info = self._tracked_collection_info(params) if str(name).upper() == "HEXW2" else None
-
         if not name:
             self.log("Invalid pump item: missing action name."); return False
+        if str(name).upper() == "STATE_RESET":
+            self._session.reset_collection_tracking(reason="queue state reset step")
+            self.log("Syringe state reset to 0 mL.")
+            self._root.after(0, self.refresh_labels)
+            return True
+
         if not self._pump_ctrl.connected:
             self.log("Pump not connected."); return False
 
@@ -1716,6 +1839,8 @@ class QueueTab:
         action_name = str(action_info.get("name") or "").strip().upper()
         if action_name == "RESUME":
             return self._exec_opentrons_resume(item)
+        if action_name == "HOME":
+            return self._exec_opentrons_home(item)
         return self._exec_opentrons_protocol(item, queue_index=queue_index)
 
     def _exec_opentrons_protocol(self, item: dict, *, queue_index: int | None = None) -> str:
@@ -1733,6 +1858,9 @@ class QueueTab:
         except Exception:
             self.log(f"Invalid Opentrons robot_port in queue item: {robot_port_raw}")
             return "failed"
+        if mode == "robot" and not robot_host:
+            robot_host = str(OPENTRONS_DEFAULT_HOST or "").strip() or None
+            robot_port = int(robot_port or OPENTRONS_DEFAULT_API_PORT)
 
         if not protocol_path and not protocol_source:
             self.log("Invalid Opentrons item: missing protocol_path/protocol_source.")
@@ -1741,7 +1869,7 @@ class QueueTab:
         resolved = None
         if protocol_path:
             resolved = self._resolve_opentrons_protocol_path(protocol_path)
-            if resolved is None:
+            if resolved is None and not protocol_source:
                 self.log(f"Opentrons protocol not found: {protocol_path}")
                 return "failed"
 
@@ -1749,6 +1877,11 @@ class QueueTab:
         data_folder = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
 
         runner = OpentronsProtocolRunner(log_callback=self.log)
+        self._active_opentrons_target = {
+            "robot_host": robot_host,
+            "robot_port": robot_port,
+            "run_id": None,
+        }
         self._session.current_stop_callback = runner.stop
         try:
             result = runner.execute_detailed(
@@ -1767,6 +1900,11 @@ class QueueTab:
             if not resume_key:
                 self.log(f"[Opentrons] {protocol_name} paused, but no resume key was provided.")
                 return "failed"
+            self._active_opentrons_target = {
+                "robot_host": robot_host,
+                "robot_port": robot_port,
+                "run_id": result.run_id,
+            }
             self._opentrons_paused_runs[resume_key] = {
                 "run_id": result.run_id,
                 "protocol_name": protocol_name,
@@ -1778,6 +1916,7 @@ class QueueTab:
             return "paused"
 
         self._opentrons_paused_runs.pop(resume_key, None)
+        self._active_opentrons_target = None
         return "completed" if result.ok else ("stopped" if result.state == "stopped" else "failed")
 
     def _exec_opentrons_resume(self, item: dict) -> str:
@@ -1802,6 +1941,11 @@ class QueueTab:
             return "failed"
 
         runner = OpentronsProtocolRunner(log_callback=self.log)
+        self._active_opentrons_target = {
+            "robot_host": robot_host,
+            "robot_port": robot_port,
+            "run_id": run_id,
+        }
         self._session.current_stop_callback = runner.stop
         try:
             result = runner.resume_run(
@@ -1824,6 +1968,11 @@ class QueueTab:
             origin_index = paused.get("queue_index")
             if isinstance(origin_index, int) and 0 <= origin_index < len(self._session.measurement_queue):
                 self._session.measurement_queue[origin_index]["status"] = "paused"
+            self._active_opentrons_target = {
+                "robot_host": robot_host,
+                "robot_port": robot_port,
+                "run_id": result.run_id,
+            }
             self.log(f"[Opentrons] {protocol_name} paused again; queue returning to next item.")
             return "completed"
 
@@ -1833,7 +1982,24 @@ class QueueTab:
                 "completed" if result.ok else ("stopped" if result.state == "stopped" else "failed")
             )
         self._opentrons_paused_runs.pop(resume_key, None)
+        self._active_opentrons_target = None
         return "completed" if result.ok else ("stopped" if result.state == "stopped" else "failed")
+
+    def _exec_opentrons_home(self, item: dict) -> str:
+        action_info = item.get("opentrons_action") or {}
+        params = action_info.get("params") or {}
+        robot_host = str(params.get("robot_host") or "").strip()
+        if not robot_host:
+            self.log("Invalid Opentrons home item: missing robot_host.")
+            return "failed"
+        try:
+            robot_port = int(params.get("robot_port") or 31950)
+        except Exception:
+            self.log(f"Invalid Opentrons home robot_port: {params.get('robot_port')}")
+            return "failed"
+
+        runner = OpentronsProtocolRunner(log_callback=self.log)
+        return "completed" if runner.home_robot(robot_host=robot_host, robot_port=robot_port) else "failed"
 
     def _log_pump_status(self, label: str, resp: str) -> None:
         text = (resp or "").strip()

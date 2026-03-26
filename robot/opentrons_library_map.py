@@ -86,6 +86,22 @@ def all_entries() -> dict:
     return dict(_map)
 
 
+def remove(hash_key: str) -> bool:
+    load_map()
+    entry = _map.get(hash_key)
+    if entry is None:
+        return False
+    path = Path(entry.get("filepath", ""))
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception:
+        pass
+    del _map[hash_key]
+    _persist()
+    return True
+
+
 def update_note(hash_key: str, note: Optional[str]) -> bool:
     load_map()
     entry = _map.get(hash_key)

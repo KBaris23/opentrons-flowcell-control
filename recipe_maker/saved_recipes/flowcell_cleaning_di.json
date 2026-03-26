@@ -1,0 +1,91 @@
+{
+  "items": [
+    {
+      "type": "ALERT",
+      "status": "pending",
+      "details": "Alert: Load DI water and confirm the flowcell inlet/outlet tubing is positioned correctly.",
+      "alert_message": "Load DI water and confirm the flowcell inlet/outlet tubing is positioned correctly."
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s | collect 0.225 mL | warn 4.5/5 mL",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": true,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "PAUSE",
+      "status": "pending",
+      "details": "Pause for 5.0 sec",
+      "pause_seconds": 5.0
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s | collect 0.225 mL | warn 4.5/5 mL",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": true,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "PAUSE",
+      "status": "pending",
+      "details": "Pause for 5.0 sec",
+      "pause_seconds": 5.0
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s | collect 0.225 mL | warn 4.5/5 mL",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": true,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "ALERT",
+      "status": "pending",
+      "details": "Alert: DI cleaning complete. Inspect the waste syringe and empty it if needed before the next run.",
+      "alert_message": "DI cleaning complete. Inspect the waste syringe and empty it if needed before the next run."
+    }
+  ]
+}

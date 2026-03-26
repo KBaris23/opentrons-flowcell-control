@@ -1,0 +1,1334 @@
+{
+  "items": [
+    {
+      "type": "OPENTRONS_PROTOCOL",
+      "status": "pending",
+      "details": "Opentrons ROBOT generated_ui_protocol_586f7d.py [pause-aware]",
+      "opentrons_action": {
+        "name": "PROTOCOL",
+        "params": {
+          "mode": "robot",
+          "protocol_name": "max_training",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\generated_ui_protocol_586f7d.py",
+          "resume_key": "0f6bb3ea14db030b",
+          "supports_pause": true
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": false,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 1",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 1
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 2",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 2
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 3",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 3
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 4",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 4
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 5",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 5
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 6",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 6
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 7",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 7
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 8",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 8
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 9",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 9
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 10",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 10
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "pending",
+      "details": "Opentrons RESUME max_training",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "max_training",
+          "resume_key": "0f6bb3ea14db030b"
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": false,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 1",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 1
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 2",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 2
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 3",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 3
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 4",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 4
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 5",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 5
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 6",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 6
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 7",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 7
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 8",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 8
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 9",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 9
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 10",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 10
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "pending",
+      "details": "Opentrons RESUME max_training",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "max_training",
+          "resume_key": "0f6bb3ea14db030b"
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": false,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 1",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 1
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 2",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 2
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 3",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 3
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 4",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 4
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 5",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 5
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 6",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 6
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 7",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 7
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 8",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 8
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 9",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 9
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 10",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 10
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "pending",
+      "details": "Opentrons RESUME max_training",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "max_training",
+          "resume_key": "0f6bb3ea14db030b"
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": false,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 1",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 1
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 2",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 2
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 3",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 3
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 4",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 4
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 5",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 5
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 6",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 6
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 7",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 7
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 8",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 8
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 9",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 9
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 10",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 10
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "pending",
+      "details": "Opentrons RESUME max_training",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "max_training",
+          "resume_key": "0f6bb3ea14db030b"
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "pending",
+      "details": "Pump: HEXW2 withdraw 225 @ 2700 (uLmin) | eta 5.0s",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 225.0,
+          "rate": 2700.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": false,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 1",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 1
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 2",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 2
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 3",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 3
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 4",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 4
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 5",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 5
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 6",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 6
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 7",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 7
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 8",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 8
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 9",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 9
+      }
+    },
+    {
+      "type": "SWV",
+      "status": "pending",
+      "details": "swv_babbbe.ms | MUX ch 10",
+      "block_name": "Sweep SWV (10 ch x 1)",
+      "method_ref": {
+        "hash_key": "swv_babbbe",
+        "technique": "SWV",
+        "params": {
+          "begin_potential": "-0.7",
+          "end_potential": "-0.1",
+          "step_potential": "0.002",
+          "amplitude": "0.036",
+          "frequency": "200",
+          "n_scans": "1",
+          "cycle_delay": "0",
+          "cond_potential": "0",
+          "cond_time": "0",
+          "mux_channel": "0"
+        },
+        "mux_channel": 10
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "pending",
+      "details": "Opentrons RESUME max_training",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "max_training",
+          "resume_key": "0f6bb3ea14db030b"
+        }
+      }
+    }
+  ]
+}

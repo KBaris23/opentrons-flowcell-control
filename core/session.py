@@ -21,6 +21,7 @@ from .method_registry import MethodRegistry
 from .opentrons_registry import OpentronsRegistry
 from .pump_step_utils import default_collection_warn_ml
 from .runner import SerialMeasurementRunner
+from .syringe_state_registry import SyringeStateRegistry
 from config import COLLECTION_SYRINGE_CAPACITY_ML
 
 
@@ -67,6 +68,7 @@ class SessionState:
         # ── Script registry (deduplication) ───────────────────────────────────
         self.registry = MethodRegistry(log_callback=log_callback)
         self.opentrons_registry = OpentronsRegistry(log_callback=log_callback)
+        self.syringe_registry = SyringeStateRegistry(log_callback=log_callback)
 
         # ── Queue clipboard (copy / paste) ────────────────────────────────────
         self.queue_clipboard: List[dict] = []
@@ -93,6 +95,7 @@ class SessionState:
         self.collection_capacity_ul: float = COLLECTION_SYRINGE_CAPACITY_ML * 1000.0
         self.collection_warn_ul: float = default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML) * 1000.0
         self.collection_warned: bool = False
+        self._load_collection_tracking_from_registry()
 
     # ── Measurement tag ───────────────────────────────────────────────────────
 
@@ -122,6 +125,8 @@ class SessionState:
         *,
         capacity_ul: Optional[float] = None,
         warn_ul: Optional[float] = None,
+        reason: str = "manual reset",
+        persist: bool = True,
     ) -> None:
         self.collection_steps = 0
         self.collection_volume_ul = 0.0
@@ -134,6 +139,14 @@ class SessionState:
             else default_collection_warn_ml(self.collection_capacity_ul / 1000.0) * 1000.0
         )
         self.collection_warned = False
+        if persist:
+            state = self.syringe_registry.reset(
+                capacity_ul=self.collection_capacity_ul,
+                warn_ul=self.collection_warn_ul,
+                reason=reason,
+                context=self._registry_context(),
+            )
+            self._apply_collection_state(state)
 
     def add_collection_volume(
         self,
@@ -148,6 +161,62 @@ class SessionState:
             self.collection_capacity_ul = float(capacity_ul)
         if warn_ul is not None and warn_ul > 0:
             self.collection_warn_ul = float(warn_ul)
+        state = self.syringe_registry.record_collection(
+            volume_ul=max(0.0, float(volume_ul)),
+            steps=self.collection_steps,
+            total_volume_ul=self.collection_volume_ul,
+            capacity_ul=self.collection_capacity_ul,
+            warn_ul=self.collection_warn_ul,
+            warned=self.collection_warned,
+            context=self._registry_context(),
+        )
+        self._apply_collection_state(state)
+
+    def _load_collection_tracking_from_registry(self) -> None:
+        self._apply_collection_state(self.syringe_registry.snapshot())
+
+    def _apply_collection_state(self, state: dict) -> None:
+        try:
+            self.collection_steps = max(0, int(state.get("steps", 0)))
+        except Exception:
+            self.collection_steps = 0
+        try:
+            self.collection_volume_ul = max(0.0, float(state.get("volume_ul", 0.0)))
+        except Exception:
+            self.collection_volume_ul = 0.0
+        try:
+            self.collection_capacity_ul = max(
+                0.0,
+                float(state.get("capacity_ul", COLLECTION_SYRINGE_CAPACITY_ML * 1000.0)),
+            )
+        except Exception:
+            self.collection_capacity_ul = COLLECTION_SYRINGE_CAPACITY_ML * 1000.0
+        try:
+            self.collection_warn_ul = max(
+                0.0,
+                float(
+                    state.get(
+                        "warn_ul",
+                        default_collection_warn_ml(self.collection_capacity_ul / 1000.0) * 1000.0,
+                    )
+                ),
+            )
+        except Exception:
+            self.collection_warn_ul = default_collection_warn_ml(self.collection_capacity_ul / 1000.0) * 1000.0
+        self.collection_warned = bool(state.get("warned", False))
+
+    def _registry_context(self) -> dict:
+        session_folder = None
+        experiment_folder = None
+        if self.session_manager is not None:
+            session_path = getattr(self.session_manager, "current_session_path", None)
+            experiment_path = getattr(self.session_manager, "current_experiment_path", None)
+            session_folder = session_path.name if session_path is not None else None
+            experiment_folder = experiment_path.name if experiment_path is not None else None
+        return {
+            "session_folder": session_folder,
+            "experiment_folder": experiment_folder,
+        }
 
     # ── Plot colour ───────────────────────────────────────────────────────────
 

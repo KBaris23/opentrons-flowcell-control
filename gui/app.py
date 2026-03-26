@@ -189,6 +189,7 @@ class ElectrochemGUI:
                 pump_ctrl      = self._pump_ctrl,
                 on_add_to_queue= self._queue_tab.add_item,
                 root           = self.root,
+                session        = self._session,
             )
         else:
             self._pump_tab = None

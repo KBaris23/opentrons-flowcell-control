@@ -33,11 +33,12 @@ except Exception:
 
 
 class PumpTab:
-    def __init__(self, parent_frame, pump_ctrl, on_add_to_queue, root: tk.Tk):
+    def __init__(self, parent_frame, pump_ctrl, on_add_to_queue, root: tk.Tk, session=None):
         self._frame = parent_frame
         self._ctrl = pump_ctrl
         self._add_to_queue = on_add_to_queue
         self._root = root
+        self._session = session
 
         self._busy = False
         self._early_logs: list[str] = []
@@ -250,6 +251,12 @@ class PumpTab:
         )
         ttk.Button(ctl, text="Port Status", command=lambda: self._threaded(self._do_status_port)).grid(
             row=1, column=2, sticky="w", **pad
+        )
+        ttk.Button(ctl, text="Reset Syringe State", command=self._reset_syringe_state).grid(
+            row=1, column=3, sticky="w", **pad
+        )
+        ttk.Button(ctl, text="Queue Reset Step", command=self._queue_state_reset).grid(
+            row=1, column=4, sticky="w", **pad
         )
 
         rawf = ttk.LabelFrame(ctl, text="Raw Command")
@@ -723,6 +730,18 @@ class PumpTab:
         if resp:
             self.log(f"<< {resp}")
 
+    def _reset_syringe_state(self) -> None:
+        if self._session is None:
+            messagebox.showwarning("Unavailable", "Session state is not available.")
+            return
+        if not messagebox.askyesno(
+            "Reset Syringe State",
+            "Reset the persistent syringe state to 0 mL?\nUse this after the collection syringe has been emptied.",
+        ):
+            return
+        self._session.reset_collection_tracking(reason="manual fluidics reset")
+        self.log("[Pump] Syringe state reset to 0 mL.")
+
     # ---- Queue helpers -------------------------------------------------------
 
     def _queue_add(self, action_name: str, params: dict, details: str) -> None:
@@ -793,3 +812,6 @@ class PumpTab:
         if not cmd:
             return
         self._queue_add("COMMAND", {"cmd": cmd}, f"Pump cmd: {cmd}")
+
+    def _queue_state_reset(self) -> None:
+        self._queue_add("STATE_RESET", {}, "Syringe state reset to 0 mL")

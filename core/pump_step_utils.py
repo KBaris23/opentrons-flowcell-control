@@ -119,6 +119,9 @@ def build_pump_details(name: str, params: dict) -> str:
 
         return " | ".join(parts)
 
+    if action == "STATE_RESET":
+        return "Syringe state reset"
+
     if action in {"START", "PAUSE", "STOP", "RESTART", "STATUS", "STATUS_PORT"}:
         return f"Pump: {action.replace('_', ' ').title()}"
 

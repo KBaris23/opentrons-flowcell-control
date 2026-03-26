@@ -16,11 +16,29 @@ Windows venv workflow:
 - The pump tab uses `pyserial` to talk to Chemyx Fusion pumps (Basic Mode).
 - You can send raw commands; any command starting with `clrf` is automatically preceded by `status port` (helps when the pump is paused).
 - Use "Simulate (no hardware)" in the pump tab to test pump actions without a connected device.
+- Collection syringe state is now persisted in `measurement_data/syringe_state_registry.json`, so tracked volume is preserved across app restarts.
+- Use the `STATE_RESET` recipe/queue step, or the `Reset Syringe State` button in the Queue tab, after you physically empty the collection syringe.
+- Alert steps already exist in both the Recipe Maker and Queue editors via the `ALERT` action.
+
+## Syringe tracking workflow
+
+- Enable `Track collected volume` on tracked `HEXW2` withdraw steps to add each pull to the persistent syringe registry.
+- Queue runs now reuse the last saved syringe total instead of clearing it automatically at start.
+- When the syringe has been emptied, add the `Syringe State Reset` block or run the `waste_disposal_reset.json` template recipe to zero the stored state.
+
+## Included recipe templates
+
+- `recipe_maker/saved_recipes/flowcell_cleaning_di.json`:
+  three `225 uL` DI withdraw pulls with alerts before and after the cleaning sequence.
+- `recipe_maker/saved_recipes/waste_disposal_reset.json`:
+  alert the operator to empty the collection syringe, then reset the persistent tracked state to `0 mL`.
 
 ## Opentrons integration
 
 - The app now includes an `Opentrons` tab for file-based OT-2 protocol inspection, queueing, optional simulation, and UI-built protocol generation.
 - Builder-generated protocols can be run immediately, queued without saving, or saved into the Opentrons protocol library.
+- The `Opentrons` tab now includes a `Home OT-2` button and an `Add Home` queue step for manual recovery.
+- Stopping the queue now also tries to stop any tracked Opentrons run and send the robot home, which helps recover from protocols left paused mid-run.
 - PalmSens execution still stays on the existing MethodSCRIPT path; the experimental `pypalmsens` sample files are intentionally not part of runtime control.
 - Bundled protocol files live under `opentrons_protocols/`.
 - Opentrons simulation is optional and only works when the `opentrons` Python package is installed locally.

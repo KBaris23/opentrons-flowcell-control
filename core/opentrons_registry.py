@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
 from config import OPENTRONS_LIBRARY_DIR
-from robot.opentrons_library_map import compute_hash, lookup, register, update_note
+from robot.opentrons_library_map import all_entries, compute_hash, lookup, register, remove, update_note
 
 
 class OpentronsRegistry:
@@ -67,6 +67,36 @@ class OpentronsRegistry:
         self._registry.clear()
         self._path_to_key.clear()
         self._log(f"[Opentrons Library] Cleared ({count} entries).")
+
+    def all_entries(self) -> Dict[str, dict]:
+        return all_entries()
+
+    def entry_for_path(self, filepath) -> Optional[tuple[str, dict]]:
+        target = Path(filepath).resolve()
+        for key, entry in all_entries().items():
+            try:
+                entry_path = Path(entry.get("filepath", "")).resolve()
+            except Exception:
+                continue
+            if entry_path == target:
+                return key, dict(entry)
+        return None
+
+    def delete_protocol(self, filepath) -> bool:
+        found = self.entry_for_path(filepath)
+        if found is None:
+            return False
+        key, entry = found
+        removed = remove(key)
+        try:
+            path = Path(entry.get("filepath", ""))
+            self._registry.pop(key, None)
+            self._path_to_key.pop(str(path), None)
+        except Exception:
+            pass
+        if removed:
+            self._log(f"[Opentrons Library] Deleted '{Path(entry.get('filepath', '')).name}' ({key})")
+        return removed
 
     @property
     def size(self) -> int:

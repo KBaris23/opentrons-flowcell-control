@@ -93,13 +93,13 @@ class OpentronsTab:
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1, minsize=260)
 
-        notebook = ttk.Notebook(container)
-        notebook.grid(row=0, column=0, sticky="nsew")
+        self._main_notebook = ttk.Notebook(container)
+        self._main_notebook.grid(row=0, column=0, sticky="nsew")
 
-        file_tab = ttk.Frame(notebook)
-        builder_tab = ttk.Frame(notebook)
-        notebook.add(file_tab, text="Protocol Config")
-        notebook.add(builder_tab, text="Protocol Builder")
+        file_tab = ttk.Frame(self._main_notebook)
+        builder_tab = ttk.Frame(self._main_notebook)
+        self._main_notebook.add(file_tab, text="Protocol Config")
+        self._main_notebook.add(builder_tab, text="Protocol Builder")
 
         self._build_file_tab(file_tab)
         self._build_builder_tab(builder_tab)
@@ -246,6 +246,10 @@ class OpentronsTab:
         ttk.Button(btns, text="Run Now", command=self.run_file_now).pack(side="left", padx=4)
         ttk.Button(btns, text="Add to Queue", command=self.add_file_to_queue).pack(side="left", padx=4)
         ttk.Button(btns, text="Add Resume", command=self.add_file_resume_to_queue).pack(side="left", padx=4)
+        ttk.Button(btns, text="Add Home", command=self.add_home_to_queue).pack(side="left", padx=4)
+        ttk.Button(btns, text="Home OT-2", command=self.home_robot_now).pack(side="left", padx=4)
+        ttk.Button(btns, text="Load Into Builder", command=self.load_current_file_into_builder).pack(side="left", padx=4)
+        ttk.Button(btns, text="Delete From Library", command=self.delete_current_library_protocol).pack(side="left", padx=4)
 
         tips = ttk.LabelFrame(config_wrap, text="Quick Help")
         tips.grid(row=1, column=0, sticky="ew", pady=(6, 0))
@@ -255,7 +259,8 @@ class OpentronsTab:
             text=(
                 "Inspect: read the file and summarize it.  "
                 "Preview: show builder-generated Python code.  "
-                "Validate: check only, no simulation or robot run."
+                "Validate: check only, no simulation or robot run.  "
+                "Use Load Into Builder to edit a saved generated library protocol."
             ),
             wraplength=900,
             justify="left",
@@ -365,6 +370,8 @@ class OpentronsTab:
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Load Selected File", command=self.load_current_file_into_builder).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Clear Builder", command=self.clear_builder_form).pack(side="left", padx=3)
 
     def _build_builder_steps_tab(self, parent) -> None:
         parent.columnconfigure(0, weight=1)
@@ -393,6 +400,7 @@ class OpentronsTab:
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Load Selected File", command=self.load_current_file_into_builder).pack(side="left", padx=3)
 
     def _build_labware_panel(self, parent) -> None:
         frame = ttk.LabelFrame(parent, text="Deck Labware")
@@ -566,22 +574,17 @@ class OpentronsTab:
         ).pack(side="left", padx=(8, 0))
 
     def _seed_builder_defaults(self) -> None:
-        self._labware_rows = [
-            {"alias": "tips", "load_name": "opentrons_96_filtertiprack_20ul", "slot": "4"},
-            {"alias": "source", "load_name": "opentrons_24_tuberack_nest_2ml_snapcap", "slot": "6"},
-            {"alias": "dest", "load_name": "opentrons_24_tuberack_nest_2ml_snapcap", "slot": "7"},
-        ]
-        self._step_rows = [
-            {
-                "kind": "transfer",
-                "volume_ul": 1.0,
-                "source_alias": "source",
-                "source_well": "A1",
-                "dest_alias": "dest",
-                "dest_well": "A2",
-                "new_tip": "once",
-            }
-        ]
+        self._labware_rows = []
+        self._step_rows = []
+        self._labware_alias_var.set("")
+        self._labware_name_var.set("")
+        self._labware_slot_var.set("")
+        self._builder_tiprack_alias.set("")
+        self._step_source_alias_var.set("")
+        self._step_source_well_var.set("")
+        self._step_dest_alias_var.set("")
+        self._step_dest_well_var.set("")
+        self._step_comment_var.set("")
 
     def _labware_load_name_options(self) -> list[str]:
         names = {
@@ -814,6 +817,122 @@ class OpentronsTab:
             raise FileNotFoundError(f"Protocol file not found: {path}")
         return path
 
+    def clear_builder_form(self) -> None:
+        self._builder_protocol_name.set("Generated Protocol")
+        self._builder_author.set("Opentrons Flowcell Console")
+        self._builder_description.set("")
+        self._builder_api.set("2.19")
+        self._builder_robot.set("OT-2")
+        self._builder_pipette_model.set("p20_single_gen2")
+        self._builder_mount.set("left")
+        self._builder_tiprack_alias.set("")
+        self._labware_alias_var.set("")
+        self._labware_name_var.set("")
+        self._labware_slot_var.set("")
+        self._step_kind_var.set("transfer")
+        self._step_volume_var.set("1")
+        self._step_source_alias_var.set("")
+        self._step_source_well_var.set("")
+        self._step_dest_alias_var.set("")
+        self._step_dest_well_var.set("")
+        self._step_location_var.set("top")
+        self._step_new_tip_var.set("once")
+        self._step_seconds_var.set("1")
+        self._step_comment_var.set("")
+        self._labware_rows = []
+        self._step_rows = []
+        self._selected_labware_index = None
+        self._selected_step_index = None
+        self._refresh_labware_name_options()
+        self._refresh_labware_tree()
+        self._refresh_step_tree()
+        self.preview_builder_protocol()
+
+    def _apply_builder_summary_placeholder(self, warning: str = "Builder is empty.") -> None:
+        self._summary_vars["name"].set((self._builder_protocol_name.get() or "").strip() or "-")
+        self._summary_vars["api"].set((self._builder_api.get() or "").strip() or "-")
+        self._summary_vars["robot"].set((self._builder_robot.get() or "").strip() or "-")
+        self._summary_vars["author"].set((self._builder_author.get() or "").strip() or "-")
+        self._summary_vars["description"].set((self._builder_description.get() or "").strip() or "-")
+        self._summary_vars["warnings"].set(warning)
+
+    def load_current_file_into_builder(self) -> None:
+        try:
+            path = self._current_protocol_path()
+        except Exception as exc:
+            messagebox.showerror("Load Failed", str(exc))
+            return
+        found = self._session.opentrons_registry.entry_for_path(path)
+        if found is None:
+            messagebox.showerror(
+                "Load Failed",
+                "This protocol is not a saved generated builder protocol in the library.",
+            )
+            return
+        _key, entry = found
+        params = dict(entry.get("params") or {})
+        if str(entry.get("kind") or "").strip() != "generated_ui_protocol" or not params:
+            messagebox.showerror(
+                "Load Failed",
+                "Only generated builder protocols can be loaded back into the builder.",
+            )
+            return
+        self._load_builder_spec(params)
+        try:
+            self._main_notebook.select(1)
+        except Exception:
+            pass
+        self.log(f"[Opentrons Builder] Loaded {path.name} into builder.")
+
+    def delete_current_library_protocol(self) -> None:
+        try:
+            path = self._current_protocol_path()
+        except Exception as exc:
+            messagebox.showerror("Delete Failed", str(exc))
+            return
+        if not messagebox.askyesno("Delete Protocol", f"Delete {path.name} from the Opentrons library?"):
+            return
+        if not self._session.opentrons_registry.delete_protocol(path):
+            messagebox.showerror("Delete Failed", "Selected file is not a deletable library protocol.")
+            return
+        self._load_protocol_files()
+        self._var_path.set("")
+        self.log(f"[Opentrons Library] Deleted {path.name}")
+
+    def _load_builder_spec(self, raw_spec: dict) -> None:
+        spec = {
+            "metadata": dict(raw_spec.get("metadata") or {}),
+            "pipette": dict(raw_spec.get("pipette") or {}),
+            "labware": [dict(entry or {}) for entry in (raw_spec.get("labware") or [])],
+            "steps": [dict(step or {}) for step in (raw_spec.get("steps") or [])],
+        }
+        meta = spec["metadata"]
+        pipette = spec["pipette"]
+        self._builder_protocol_name.set(str(meta.get("protocol_name", "Generated Protocol")))
+        self._builder_author.set(str(meta.get("author", "Opentrons Flowcell Console")))
+        self._builder_description.set(str(meta.get("description", "")))
+        self._builder_api.set(str(meta.get("api_level", "2.19")))
+        self._builder_robot.set(str(meta.get("robot_type", "OT-2")))
+        self._builder_pipette_model.set(str(pipette.get("model", "p20_single_gen2")))
+        self._builder_mount.set(str(pipette.get("mount", "left")))
+        self._builder_tiprack_alias.set(str(pipette.get("tiprack_alias", "")))
+        self._labware_rows = spec["labware"]
+        self._step_rows = spec["steps"]
+        self._selected_labware_index = None
+        self._selected_step_index = None
+        self._labware_alias_var.set("")
+        self._labware_name_var.set("")
+        self._labware_slot_var.set("")
+        self._step_source_alias_var.set("")
+        self._step_source_well_var.set("")
+        self._step_dest_alias_var.set("")
+        self._step_dest_well_var.set("")
+        self._step_comment_var.set("")
+        self._refresh_labware_name_options()
+        self._refresh_labware_tree()
+        self._refresh_step_tree()
+        self.preview_builder_protocol()
+
     def inspect_current_file(self):
         try:
             summary = self._runner.inspect_protocol(self._current_protocol_path())
@@ -836,6 +955,7 @@ class OpentronsTab:
         try:
             path = self._current_protocol_path()
             summary = self._runner.inspect_protocol(path)
+            source_text = path.read_text(encoding="utf-8")
         except Exception as exc:
             messagebox.showerror("Queue Error", str(exc))
             return
@@ -849,6 +969,7 @@ class OpentronsTab:
             mode=mode,
             protocol_name=summary.protocol_name,
             protocol_path=str(path),
+            protocol_source=source_text,
             supports_pause=summary.has_pause,
             robot_host=self._robot_host(),
             robot_port=self._robot_port(),
@@ -868,6 +989,46 @@ class OpentronsTab:
             protocol_name=summary.protocol_name,
             resume_key=self._resume_key(protocol_name=summary.protocol_name, protocol_source=source_text),
         )
+
+    def add_home_to_queue(self) -> None:
+        try:
+            robot_host = self._robot_host()
+            robot_port = self._robot_port()
+        except Exception as exc:
+            messagebox.showerror("Queue Error", str(exc))
+            return
+        if not robot_host:
+            messagebox.showwarning("Missing Host", "Enter the OT-2 hostname or IP address first.")
+            return
+        self._queue_opentrons_home_item(
+            details=f"Opentrons HOME {robot_host}",
+            robot_host=robot_host,
+            robot_port=robot_port,
+        )
+
+    def home_robot_now(self) -> None:
+        try:
+            robot_host = self._robot_host()
+            robot_port = self._robot_port()
+        except Exception as exc:
+            messagebox.showerror("Home Failed", str(exc))
+            return
+        if not robot_host:
+            messagebox.showwarning("Missing Host", "Enter the OT-2 hostname or IP address first.")
+            return
+
+        def _worker() -> None:
+            ok = self._runner.home_robot(robot_host=robot_host, robot_port=robot_port)
+            self._root.after(
+                0,
+                lambda: (
+                    messagebox.showinfo("OT-2 Home", f"Home command sent to {robot_host}.")
+                    if ok
+                    else messagebox.showerror("OT-2 Home", f"Failed to home robot at {robot_host}.")
+                ),
+            )
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _run_protocol_async(
         self,
@@ -974,6 +1135,31 @@ class OpentronsTab:
                 "params": {
                     "protocol_name": protocol_name,
                     "resume_key": resume_key,
+                },
+            },
+        }
+        try:
+            self._add_to_queue(item)
+            self.log(f"[Queue] Added: {details}")
+        except Exception as exc:
+            messagebox.showerror("Queue Error", str(exc))
+
+    def _queue_opentrons_home_item(
+        self,
+        *,
+        details: str,
+        robot_host: str,
+        robot_port: int,
+    ) -> None:
+        item = {
+            "type": "OPENTRONS_HOME",
+            "status": "pending",
+            "details": details,
+            "opentrons_action": {
+                "name": "HOME",
+                "params": {
+                    "robot_host": robot_host,
+                    "robot_port": int(robot_port),
                 },
             },
         }
@@ -1250,6 +1436,13 @@ class OpentronsTab:
         self._preview_text.configure(state="disabled")
 
     def preview_builder_protocol(self):
+        if not self._labware_rows and not self._step_rows:
+            self._render_preview(
+                "# Builder is empty\n"
+                "# Add deck labware and protocol steps, or load a saved generated protocol into the builder.\n"
+            )
+            self._apply_builder_summary_placeholder("Builder is empty.")
+            return
         try:
             source, spec = generate_protocol_source(self._builder_spec())
             summary = self._runner.inspect_protocol(
@@ -1259,6 +1452,7 @@ class OpentronsTab:
             self._apply_summary(summary)
             self._render_preview(source)
         except Exception as exc:
+            self._apply_builder_summary_placeholder(str(exc))
             self._render_preview(f"# Builder error\n# {exc}\n")
 
     def _generate_builder_protocol(self) -> tuple[str, dict]:
