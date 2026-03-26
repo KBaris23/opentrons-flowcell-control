@@ -19,7 +19,12 @@ from config import (
     OPENTRONS_DEFAULT_RUN_MODE,
     OPENTRONS_PROTOCOLS_DIR,
 )
-from robot import OpentronsProtocolRunner, generate_protocol_source, summarize_protocol_spec
+from robot import (
+    OpentronsProtocolRunner,
+    estimate_tip_usage,
+    generate_protocol_source,
+    summarize_protocol_spec,
+)
 from robot.opentrons_builder import spec_hash_params
 
 
@@ -62,6 +67,11 @@ class OpentronsTab:
     }
     _GENERIC_WELL_RE = re.compile(r"^([A-P])([1-9]|1[0-9]|2[0-4])$")
     _MAX_TRANSFER_VOLUME_UL = 50000.0
+    _TIP_WELL_OPTIONS = [
+        f"{row}{column}"
+        for column in range(1, 13)
+        for row in "ABCDEFGH"
+    ]
 
     def __init__(self, parent_frame, session, on_add_to_queue, root: tk.Tk):
         self._frame = parent_frame
@@ -289,6 +299,10 @@ class OpentronsTab:
         self._builder_pipette_model = tk.StringVar(value="p20_single_gen2")
         self._builder_mount = tk.StringVar(value="left")
         self._builder_tiprack_alias = tk.StringVar(value="tips")
+        self._builder_starting_tip = tk.StringVar(value="A1")
+        self._builder_tip_budget_var = tk.StringVar(
+            value="Tip budget: 0 pickup(s) requested; 96 tip(s) available from A1 to H12; 96 tip(s) left."
+        )
 
         notebook = ttk.Notebook(parent)
         notebook.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
@@ -360,6 +374,20 @@ class OpentronsTab:
         ).grid(row=3, column=5, padx=4, pady=4, sticky="ew")
         ttk.Label(meta, text="Tiprack alias:").grid(row=3, column=0, padx=4, pady=4, sticky="e")
         ttk.Entry(meta, textvariable=self._builder_tiprack_alias, width=12).grid(row=3, column=1, padx=4, pady=4, sticky="w")
+        ttk.Label(meta, text="Starting tip:").grid(row=3, column=2, padx=4, pady=4, sticky="e")
+        ttk.Combobox(
+            meta,
+            textvariable=self._builder_starting_tip,
+            values=self._TIP_WELL_OPTIONS,
+            width=10,
+        ).grid(row=3, column=3, padx=4, pady=4, sticky="w")
+        ttk.Label(
+            meta,
+            textvariable=self._builder_tip_budget_var,
+            foreground="#666",
+            wraplength=900,
+            justify="left",
+        ).grid(row=4, column=0, columnspan=6, padx=4, pady=(0, 4), sticky="w")
 
         self._build_labware_panel(deck_wrap)
 
@@ -580,11 +608,13 @@ class OpentronsTab:
         self._labware_name_var.set("")
         self._labware_slot_var.set("")
         self._builder_tiprack_alias.set("")
+        self._builder_starting_tip.set("A1")
         self._step_source_alias_var.set("")
         self._step_source_well_var.set("")
         self._step_dest_alias_var.set("")
         self._step_dest_well_var.set("")
         self._step_comment_var.set("")
+        self._set_tip_budget_message("Tip budget: add a tiprack and preview the builder to estimate remaining tips.")
 
     def _labware_load_name_options(self) -> list[str]:
         names = {
@@ -602,6 +632,45 @@ class OpentronsTab:
     def _set_step_warning(self, message: str) -> None:
         if hasattr(self, "_step_warning_var"):
             self._step_warning_var.set(message)
+
+    def _set_tip_budget_message(self, message: str) -> None:
+        if hasattr(self, "_builder_tip_budget_var"):
+            self._builder_tip_budget_var.set(message)
+
+    @staticmethod
+    def _merge_warning_lists(base_warnings: list[str], extra_warnings: list[str]) -> list[str]:
+        merged: list[str] = []
+        for warning in [*(base_warnings or []), *(extra_warnings or [])]:
+            if warning and warning not in merged:
+                merged.append(warning)
+        return merged
+
+    def _builder_tip_usage_warnings(self, spec: dict | None = None) -> list[str]:
+        try:
+            usage = estimate_tip_usage(spec or self._builder_spec())
+        except Exception as exc:
+            self._set_tip_budget_message(f"Tip budget: unavailable ({exc})")
+            return []
+
+        warnings = list(usage.get("warnings") or [])
+        available_tips = usage.get("available_tips")
+        if available_tips is None:
+            self._set_tip_budget_message(
+                f"Tip budget: {usage.get('tips_used', 0)} pickup(s) requested. "
+                "Estimate unavailable for this tiprack."
+            )
+            return warnings
+
+        message = (
+            f"Tip budget: {usage.get('tips_used', 0)} pickup(s) requested; "
+            f"{available_tips} tip(s) available from {usage.get('starting_tip')} to {usage.get('end_tip')}; "
+            f"{usage.get('remaining_tips', 0)} tip(s) left."
+        )
+        if usage.get("over_capacity"):
+            short_by = max(int(usage.get("tips_used", 0)) - int(available_tips), 0)
+            message += f" Short by {short_by} tip(s)."
+        self._set_tip_budget_message(message)
+        return warnings
 
     def _known_labware_aliases(self) -> set[str]:
         aliases = {
@@ -826,6 +895,7 @@ class OpentronsTab:
         self._builder_pipette_model.set("p20_single_gen2")
         self._builder_mount.set("left")
         self._builder_tiprack_alias.set("")
+        self._builder_starting_tip.set("A1")
         self._labware_alias_var.set("")
         self._labware_name_var.set("")
         self._labware_slot_var.set("")
@@ -843,6 +913,7 @@ class OpentronsTab:
         self._step_rows = []
         self._selected_labware_index = None
         self._selected_step_index = None
+        self._set_tip_budget_message("Tip budget: add a tiprack and preview the builder to estimate remaining tips.")
         self._refresh_labware_name_options()
         self._refresh_labware_tree()
         self._refresh_step_tree()
@@ -916,6 +987,7 @@ class OpentronsTab:
         self._builder_pipette_model.set(str(pipette.get("model", "p20_single_gen2")))
         self._builder_mount.set(str(pipette.get("mount", "left")))
         self._builder_tiprack_alias.set(str(pipette.get("tiprack_alias", "")))
+        self._builder_starting_tip.set(str(pipette.get("starting_tip", "A1")))
         self._labware_rows = spec["labware"]
         self._step_rows = spec["steps"]
         self._selected_labware_index = None
@@ -1422,6 +1494,7 @@ class OpentronsTab:
                 "model": self._builder_pipette_model.get(),
                 "mount": self._builder_mount.get(),
                 "tiprack_alias": self._builder_tiprack_alias.get(),
+                "starting_tip": self._builder_starting_tip.get(),
             },
             "labware": list(self._labware_rows),
             "steps": list(self._step_rows),
@@ -1441,6 +1514,7 @@ class OpentronsTab:
                 "# Builder is empty\n"
                 "# Add deck labware and protocol steps, or load a saved generated protocol into the builder.\n"
             )
+            self._set_tip_budget_message("Tip budget: add a tiprack and preview the builder to estimate remaining tips.")
             self._apply_builder_summary_placeholder("Builder is empty.")
             return
         try:
@@ -1449,9 +1523,11 @@ class OpentronsTab:
                 source_text=source,
                 protocol_name=f"{spec['metadata']['protocol_name']}.py",
             )
+            summary.warnings = self._merge_warning_lists(summary.warnings, self._builder_tip_usage_warnings(spec))
             self._apply_summary(summary)
             self._render_preview(source)
         except Exception as exc:
+            self._set_tip_budget_message(f"Tip budget: unavailable ({exc})")
             self._apply_builder_summary_placeholder(str(exc))
             self._render_preview(f"# Builder error\n# {exc}\n")
 
@@ -1461,6 +1537,7 @@ class OpentronsTab:
             source_text=source,
             protocol_name=f"{spec['metadata']['protocol_name']}.py",
         )
+        summary.warnings = self._merge_warning_lists(summary.warnings, self._builder_tip_usage_warnings(spec))
         self._apply_summary(summary)
         self._render_preview(source)
         return source, spec

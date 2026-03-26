@@ -37,6 +37,7 @@ Windows venv workflow:
 
 - The app now includes an `Opentrons` tab for file-based OT-2 protocol inspection, queueing, optional simulation, and UI-built protocol generation.
 - Builder-generated protocols can be run immediately, queued without saving, or saved into the Opentrons protocol library.
+- The Protocol Builder now supports a configurable pipette `starting_tip` and shows a live tip-budget estimate from that start well to the end of the rack so you can catch tip exhaustion before a run.
 - The `Opentrons` tab now includes a `Home OT-2` button and an `Add Home` queue step for manual recovery.
 - Stopping the queue now also tries to stop any tracked Opentrons run and send the robot home, which helps recover from protocols left paused mid-run.
 - PalmSens execution still stays on the existing MethodSCRIPT path; the experimental `pypalmsens` sample files are intentionally not part of runtime control.

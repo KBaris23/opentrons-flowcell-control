@@ -6,6 +6,12 @@ import json
 import re
 from typing import Any
 
+_STANDARD_96_TIPRACK_ORDER = tuple(
+    f"{row}{column}"
+    for column in range(1, 13)
+    for row in "ABCDEFGH"
+)
+
 
 def normalize_identifier(value: str, *, fallback: str) -> str:
     text = re.sub(r"[^a-zA-Z0-9_]+", "_", (value or "").strip())
@@ -39,6 +45,15 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
 
     if tiprack_alias not in {entry["alias"] for entry in cleaned_labware}:
         raise ValueError("Tiprack alias must match one of the loaded labware aliases.")
+    tiprack_entry = next(entry for entry in cleaned_labware if entry["alias"] == tiprack_alias)
+    starting_tip = str(pipette.get("starting_tip", "A1")).strip().upper() or "A1"
+    if not re.fullmatch(r"^[A-Z]+[1-9][0-9]*$", starting_tip):
+        raise ValueError("Starting tip must look like a tip well such as A1 or C3.")
+    tip_order = tiprack_well_order(tiprack_entry["load_name"])
+    if tip_order is not None and starting_tip not in tip_order:
+        raise ValueError(
+            f"Starting tip '{starting_tip}' is not valid for tiprack '{tiprack_entry['load_name']}'."
+        )
 
     cleaned_steps: list[dict[str, Any]] = []
     for idx, step in enumerate(steps, start=1):
@@ -90,6 +105,7 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
             "model": str(pipette.get("model", "p20_single_gen2")).strip() or "p20_single_gen2",
             "mount": str(pipette.get("mount", "left")).strip().lower() or "left",
             "tiprack_alias": tiprack_alias,
+            "starting_tip": starting_tip,
         },
         "labware": cleaned_labware,
         "steps": cleaned_steps,
@@ -103,6 +119,78 @@ def spec_hash_params(spec: dict[str, Any]) -> dict[str, Any]:
 def summarize_protocol_spec(spec: dict[str, Any]) -> str:
     meta = spec["metadata"]
     return f"{meta['protocol_name']} | {len(spec['steps'])} step(s) | {spec['pipette']['model']}"
+
+
+def tiprack_well_order(load_name: str) -> tuple[str, ...] | None:
+    name = str(load_name or "").strip().lower()
+    if "tiprack" in name and "96" in name:
+        return _STANDARD_96_TIPRACK_ORDER
+    return None
+
+
+def estimate_tip_usage(raw_spec: dict[str, Any]) -> dict[str, Any]:
+    spec = normalize_protocol_spec(raw_spec)
+    pipette = spec["pipette"]
+    steps = spec["steps"]
+    tiprack_entry = next(entry for entry in spec["labware"] if entry["alias"] == pipette["tiprack_alias"])
+    tiprack_load_name = tiprack_entry["load_name"]
+    tip_order = tiprack_well_order(tiprack_load_name)
+
+    tips_used = 0
+    explicit_tip_well_steps = 0
+    for step in steps:
+        kind = step["kind"]
+        if kind == "transfer" and step.get("new_tip") in {"once", "always"}:
+            tips_used += 1
+        elif kind == "pick_up_tip":
+            tips_used += 1
+            if step.get("source_well"):
+                explicit_tip_well_steps += 1
+
+    warnings: list[str] = []
+    if tip_order is None:
+        warnings.append(
+            "Tip budget estimate supports standard 96-well tipracks only; verify remaining tips manually."
+        )
+        return {
+            "tiprack_alias": pipette["tiprack_alias"],
+            "tiprack_load_name": tiprack_load_name,
+            "starting_tip": pipette["starting_tip"],
+            "end_tip": None,
+            "tips_used": tips_used,
+            "available_tips": None,
+            "remaining_tips": None,
+            "over_capacity": False,
+            "explicit_tip_well_steps": explicit_tip_well_steps,
+            "warnings": warnings,
+        }
+
+    start_index = tip_order.index(pipette["starting_tip"])
+    available_tips = len(tip_order) - start_index
+    remaining_tips = available_tips - tips_used
+    over_capacity = remaining_tips < 0
+    if over_capacity:
+        warnings.append(
+            f"Tip usage estimate exceeds the remaining rack: {tips_used} pickup(s) requested but only "
+            f"{available_tips} tip(s) remain from {pipette['starting_tip']} to {tip_order[-1]}."
+        )
+    if explicit_tip_well_steps:
+        warnings.append(
+            "Explicit pick_up_tip wells are counted as one pickup each; verify they do not reuse skipped tips."
+        )
+
+    return {
+        "tiprack_alias": pipette["tiprack_alias"],
+        "tiprack_load_name": tiprack_load_name,
+        "starting_tip": pipette["starting_tip"],
+        "end_tip": tip_order[-1],
+        "tips_used": tips_used,
+        "available_tips": available_tips,
+        "remaining_tips": max(remaining_tips, 0),
+        "over_capacity": over_capacity,
+        "explicit_tip_well_steps": explicit_tip_well_steps,
+        "warnings": warnings,
+    }
 
 
 def generate_protocol_source(raw_spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -142,9 +230,11 @@ def generate_protocol_source(raw_spec: dict[str, Any]) -> tuple[str, dict[str, A
     lines.extend(
         [
             f"    pipette = protocol.load_instrument({pipette['model']!r}, {pipette['mount']!r}, tip_racks=[{tiprack_var}])",
-            "",
         ]
     )
+    if pipette["starting_tip"] != "A1":
+        lines.append(f"    pipette.starting_tip = {tiprack_var}[{pipette['starting_tip']!r}]")
+    lines.append("")
 
     if not steps:
         lines.append("    protocol.comment('No steps defined.')")
