@@ -246,6 +246,131 @@ What physically happens:
 - Robot resumes, adds the next `5 uL`, and pauses again.
 - Repeat until all 5 titration points are done.
 
+## Alternative worked example: 5-step titration with multiple protocols and starting tips
+
+The pause/resume pattern above is still valid and is often the cleanest option when you want one OT-2 protocol to own the whole titration. But now that the builder supports `starting_tip`, you can also split the titration into multiple small protocols and place each one on a known tip index.
+
+This version uses:
+- `5` separate Opentrons protocols
+- `1` transfer per protocol
+- no `pause` steps
+- no `OPENTRONS_RESUME` steps
+- explicit starting tips so the protocols do not fight over automatic tip tracking
+
+The same assumptions from the first worked example still apply:
+- stock is `stock:A1`
+- dilute tube is `dilute:A1`
+- each addition is `5 uL`
+- each flowcell pull is `225 uL`
+- you want an SWV after every addition
+
+### 1. Build five single-transfer protocols
+
+Go to `Opentrons -> Protocol Builder`.
+
+Use the same deck setup each time:
+- alias `tips`, load name `opentrons_96_filtertiprack_20ul`, slot `4`
+- alias `stock`, load name `opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap`, slot `5`
+- alias `dilute`, load name `opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical`, slot `6`
+
+Create five saved protocols with the same transfer step but different names and `Starting tip` values:
+
+1. `Titration_5x5uL_step1`
+   Starting tip: `A1`
+2. `Titration_5x5uL_step2`
+   Starting tip: `B1`
+3. `Titration_5x5uL_step3`
+   Starting tip: `C1`
+4. `Titration_5x5uL_step4`
+   Starting tip: `D1`
+5. `Titration_5x5uL_step5`
+   Starting tip: `E1`
+
+For each of those protocols, use:
+- `Pipette`: `p20_single_gen2`
+- `Pipette side`: your real mount, for example `left`
+- `Tiprack alias`: `tips`
+
+Add these exact steps:
+
+1. `comment`
+   Text: `Titration step N`
+2. `transfer`
+   Volume: `5`
+   Source Alias: `stock`
+   Source Well: `A1`
+   Dest Alias: `dilute`
+   Dest Well: `A1`
+   New Tip: `always`
+3. `comment`
+   Text: `Titration step N complete`
+
+Replace `N` with `1` through `5` for each saved protocol.
+
+In `Generated Preview`, each protocol should show one `pipette.transfer(...)` line and no `protocol.pause(...)` lines. You should also see the builder tip budget reflect the chosen start well for that protocol.
+
+### 2. Reuse the same SWV method and pump setup
+
+Use the same SWV library entry and the same `HEXW2` flowcell-pull settings from the first worked example:
+- volume `225`
+- target ETA `5`
+- calculated rate about `2700`
+- tracking enabled
+- capacity `50`
+- warning at `45`
+
+### 3. Build the recipe
+
+Now build the recipe in this exact order:
+
+1. `OPENTRONS_PROTOCOL` for `Titration_5x5uL_step1`
+2. `PUMP_HEXW2` withdraw `225 uL`
+3. `SWV`
+4. `OPENTRONS_PROTOCOL` for `Titration_5x5uL_step2`
+5. `PUMP_HEXW2`
+6. `SWV`
+7. `OPENTRONS_PROTOCOL` for `Titration_5x5uL_step3`
+8. `PUMP_HEXW2`
+9. `SWV`
+10. `OPENTRONS_PROTOCOL` for `Titration_5x5uL_step4`
+11. `PUMP_HEXW2`
+12. `SWV`
+13. `OPENTRONS_PROTOCOL` for `Titration_5x5uL_step5`
+14. `PUMP_HEXW2`
+15. `SWV`
+
+Why this order works:
+- each Opentrons protocol performs exactly one titration addition and then finishes
+- the queue naturally returns to the pump and SWV steps after each completed protocol
+- the next protocol starts from its own explicit `starting_tip`, so tip usage stays predictable across the whole recipe
+
+### 4. Sanity checks before running
+
+Check these before you start:
+- the Recipe Maker collection summary should still read about `1.125 mL`
+- each Opentrons step points to the correct single-transfer protocol
+- the five protocols use non-overlapping starting tips such as `A1`, `B1`, `C1`, `D1`, and `E1`
+- each builder preview shows one transfer and no pause
+- the OT-2 deck layout is identical across all five protocols
+
+### 5. Send to queue and run
+
+1. In `Recipes`, click `Send to Queue`.
+2. Go to `Run Queue`.
+3. Confirm the queue order matches the 15-item list above.
+4. Make sure the pump is connected.
+5. Make sure the OT-2 host/IP is correct.
+6. Start the queue.
+
+What physically happens:
+- protocol 1 adds `5 uL` stock using its assigned starting tip and completes
+- syringe withdraws `225 uL` into the flowcell
+- SWV runs on that concentration
+- protocol 2 runs with its own assigned starting tip
+- the same pattern repeats until all 5 titration points are done
+
+This version is useful when you want the recipe itself, rather than `pause` and `resume`, to be the thing coordinating the handoff between robot transfer, pump pull, and electrochemistry.
+
 ## Roadmap
 
 - Add true robot execution beyond file validation/simulation once the target OT-2 deployment path is finalized.
