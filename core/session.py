@@ -95,6 +95,10 @@ class SessionState:
         self.collection_capacity_ul: float = COLLECTION_SYRINGE_CAPACITY_ML * 1000.0
         self.collection_warn_ul: float = default_collection_warn_ml(COLLECTION_SYRINGE_CAPACITY_ML) * 1000.0
         self.collection_warned: bool = False
+        self.collection_last_event: str = "initialized"
+        self.collection_last_reset_at: str = ""
+        self.collection_updated_at: str = ""
+        self._collection_state_listeners: list[Callable[[], None]] = []
         self._load_collection_tracking_from_registry()
 
     # ── Measurement tag ───────────────────────────────────────────────────────
@@ -175,6 +179,18 @@ class SessionState:
     def _load_collection_tracking_from_registry(self) -> None:
         self._apply_collection_state(self.syringe_registry.snapshot())
 
+    def register_collection_state_listener(self, callback: Callable[[], None]) -> None:
+        """Register a callback fired whenever collection state is refreshed."""
+        if callback not in self._collection_state_listeners:
+            self._collection_state_listeners.append(callback)
+
+    def _notify_collection_state_listeners(self) -> None:
+        for callback in list(self._collection_state_listeners):
+            try:
+                callback()
+            except Exception:
+                pass
+
     def _apply_collection_state(self, state: dict) -> None:
         try:
             self.collection_steps = max(0, int(state.get("steps", 0)))
@@ -204,6 +220,10 @@ class SessionState:
         except Exception:
             self.collection_warn_ul = default_collection_warn_ml(self.collection_capacity_ul / 1000.0) * 1000.0
         self.collection_warned = bool(state.get("warned", False))
+        self.collection_last_event = str(state.get("last_event") or "initialized")
+        self.collection_last_reset_at = str(state.get("last_reset_at") or "")
+        self.collection_updated_at = str(state.get("updated_at") or "")
+        self._notify_collection_state_listeners()
 
     def _registry_context(self) -> dict:
         session_folder = None

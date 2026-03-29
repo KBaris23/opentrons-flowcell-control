@@ -80,6 +80,8 @@ class QueueTab:
         self._active_opentrons_target: dict[str, str | int | None] | None = None
 
         self._build()
+        self._session.register_collection_state_listener(self._schedule_refresh_labels)
+        self._schedule_refresh_labels()
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
@@ -169,6 +171,12 @@ class QueueTab:
         self._lbl_collection = ttk.Label(info_bar, text="Collection: 0 steps | 0.000 / 50.0 mL",
                                          foreground="#555")
         self._lbl_collection.pack(side="left", padx=8)
+        self._lbl_collection_meta = ttk.Label(
+            info_bar,
+            text="Registry: warn at 40.0 mL | event: initialized",
+            foreground="#777",
+        )
+        self._lbl_collection_meta.pack(side="left", padx=8)
         ttk.Button(info_bar, text="Reset Counter",
                    command=self._reset_counter).pack(side="right", padx=4)
         ttk.Button(info_bar, text="Reset Syringe State",
@@ -240,6 +248,17 @@ class QueueTab:
                 f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
             )
         )
+        self._lbl_collection_meta.config(
+            text=(
+                "Registry: "
+                f"warn at {self._session.collection_warn_ul / 1000.0:.1f} mL | "
+                f"event: {self._session.collection_last_event} | "
+                f"updated: {self._session.collection_updated_at or '-'}"
+            )
+        )
+
+    def _schedule_refresh_labels(self) -> None:
+        self._root.after(0, self.refresh_labels)
 
 
     # ── Session info bar buttons ──────────────────────────────────────────────

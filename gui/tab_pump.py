@@ -57,6 +57,8 @@ class PumpTab:
         self._run_rate_per_s: float | None = None
         self._run_units = ""
         self._lbl_run: ttk.Label | None = None
+        self._lbl_syringe_state: ttk.Label | None = None
+        self._lbl_syringe_meta: ttk.Label | None = None
         self._var_auto_prep: tk.BooleanVar | None = None
         self._var_poll_status: tk.BooleanVar | None = None
         self._last_status_code: int | None = None
@@ -72,6 +74,9 @@ class PumpTab:
             return
 
         self._build()
+        if self._session is not None:
+            self._session.register_collection_state_listener(self._schedule_refresh_syringe_state_view)
+        self._schedule_refresh_syringe_state_view()
 
     # ---- UI -----------------------------------------------------------------
 
@@ -282,6 +287,22 @@ class PumpTab:
             foreground="#666",
         ).grid(row=1, column=0, columnspan=4, padx=6, pady=(0, 6), sticky="w")
 
+        statef = ttk.LabelFrame(ctl, text="Syringe Registry")
+        statef.grid(row=3, column=0, columnspan=6, sticky="ew", padx=6, pady=(2, 4))
+        statef.columnconfigure(0, weight=1)
+        self._lbl_syringe_state = ttk.Label(
+            statef,
+            text="Collected: 0 steps | 0.000 / 50.0 mL",
+            foreground="#555",
+        )
+        self._lbl_syringe_state.grid(row=0, column=0, sticky="w", padx=6, pady=(4, 0))
+        self._lbl_syringe_meta = ttk.Label(
+            statef,
+            text="Warning at 40.0 mL | event: initialized | updated: -",
+            foreground="#777",
+        )
+        self._lbl_syringe_meta.grid(row=1, column=0, sticky="w", padx=6, pady=(0, 6))
+
         # Log
         log_frame = ttk.LabelFrame(panes, text="Log")
         log_frame.columnconfigure(0, weight=1)
@@ -323,6 +344,28 @@ class PumpTab:
             self._log_text.configure(state="disabled")
 
         self._root.after(0, _append)
+
+    def _refresh_syringe_state_view(self) -> None:
+        if self._lbl_syringe_state is None or self._lbl_syringe_meta is None or self._session is None:
+            return
+        self._lbl_syringe_state.configure(
+            text=(
+                "Collected: "
+                f"{self._session.collection_steps} steps | "
+                f"{self._session.collection_volume_ul / 1000.0:.3f} / "
+                f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
+            )
+        )
+        self._lbl_syringe_meta.configure(
+            text=(
+                f"Warning at {self._session.collection_warn_ul / 1000.0:.1f} mL | "
+                f"event: {self._session.collection_last_event} | "
+                f"updated: {self._session.collection_updated_at or '-'}"
+            )
+        )
+
+    def _schedule_refresh_syringe_state_view(self) -> None:
+        self._root.after(0, self._refresh_syringe_state_view)
 
     def autoconnect(self) -> None:
         if self._ctrl is None:
