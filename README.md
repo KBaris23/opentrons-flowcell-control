@@ -38,6 +38,8 @@ Windows venv workflow:
 - The app now includes an `Opentrons` tab for file-based OT-2 protocol inspection, queueing, optional simulation, and UI-built protocol generation.
 - Builder-generated protocols can be run immediately, queued without saving, or saved into the Opentrons protocol library.
 - The Protocol Builder now supports a configurable pipette `starting_tip` and shows a live tip-budget estimate from that start well to the end of the rack so you can catch tip exhaustion before a run.
+- The Protocol Builder can also persist the next suggested starting tip for a standard 96-well tiprack and auto-advance it after you save a builder protocol, so sequential protocols can continue tip usage across saves.
+- Builder step `Location` is now preserved for transfer, aspirate, dispense, move, and blow-out steps. For safety, `bottom` uses a small clearance above the true well floor instead of the exact bottom point.
 - The `Opentrons` tab now includes a `Home OT-2` button and an `Add Home` queue step for manual recovery.
 - Stopping the queue now also tries to stop any tracked Opentrons run and send the robot home, which helps recover from protocols left paused mid-run.
 - PalmSens execution still stays on the existing MethodSCRIPT path; the experimental `pypalmsens` sample files are intentionally not part of runtime control.
@@ -73,7 +75,7 @@ In `Setup`, enter:
 Add these labware rows:
 - alias `tips`, load name `opentrons_96_filtertiprack_20ul`, slot `4`
 - alias `stock`, load name `opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap`, slot `5`
-- alias `dilute`, load name `opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical`, slot `6`
+- alias `dilute`, load name `opentrons_6_tuberack_falcon_50ml_conical`, slot `6`
 
 Go to `Steps` and add these exact protocol steps:
 
@@ -230,6 +232,11 @@ Check these before you start:
 - The OT-2 file uses the correct rack load names and slots
 - The stock and dilute wells are both really `A1`
 
+50 mL rack note:
+- `opentrons_6_tuberack_falcon_50ml_conical` is the right built-in load name for a standard `6 x 50 mL` Falcon rack.
+- Other valid 50 mL rack names exist, but they are only correct for those exact geometries, for example `opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical`, `opentrons_10_tuberack_nest_4x50ml_6x15ml_conical`, or `opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical_acrylic`.
+- A wrong but still valid 50 mL load name can cause the OT-2 to move with the wrong heights and XY offsets, which can look like the robot is crashing into the rack.
+
 ### 5. Send to queue and run
 
 1. In `Recipes`, click `Send to Queue`.
@@ -271,7 +278,7 @@ Go to `Opentrons -> Protocol Builder`.
 Use the same deck setup each time:
 - alias `tips`, load name `opentrons_96_filtertiprack_20ul`, slot `4`
 - alias `stock`, load name `opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap`, slot `5`
-- alias `dilute`, load name `opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical`, slot `6`
+- alias `dilute`, load name `opentrons_6_tuberack_falcon_50ml_conical`, slot `6`
 
 Create five saved protocols with the same transfer step but different names and `Starting tip` values:
 

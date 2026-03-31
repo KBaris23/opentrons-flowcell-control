@@ -18,7 +18,7 @@ requirements = {
 def run(protocol: protocol_api.ProtocolContext):
     tips = protocol.load_labware('opentrons_96_filtertiprack_20ul', '7')
     stock = protocol.load_labware('opentrons_24_tuberack_nest_2ml_snapcap', '6')
-    dilute = protocol.load_labware('opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical', '3')
+    dilute = protocol.load_labware('opentrons_6_tuberack_falcon_50ml_conical', '3')
     pipette = protocol.load_instrument('p20_single_gen2', 'left', tip_racks=[tips])
 
     protocol.comment('step 1')

@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 
 from .method_registry import MethodRegistry
 from .opentrons_registry import OpentronsRegistry
+from .opentrons_tip_state_registry import OpentronsTipStateRegistry
 from .pump_step_utils import default_collection_warn_ml
 from .runner import SerialMeasurementRunner
 from .syringe_state_registry import SyringeStateRegistry
@@ -68,6 +69,7 @@ class SessionState:
         # ── Script registry (deduplication) ───────────────────────────────────
         self.registry = MethodRegistry(log_callback=log_callback)
         self.opentrons_registry = OpentronsRegistry(log_callback=log_callback)
+        self.opentrons_tip_registry = OpentronsTipStateRegistry(log_callback=log_callback)
         self.syringe_registry = SyringeStateRegistry(log_callback=log_callback)
 
         # ── Queue clipboard (copy / paste) ────────────────────────────────────

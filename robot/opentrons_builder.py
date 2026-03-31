@@ -11,6 +11,7 @@ _STANDARD_96_TIPRACK_ORDER = tuple(
     for column in range(1, 13)
     for row in "ABCDEFGH"
 )
+_BOTTOM_CLEARANCE_MM = 2.0
 
 
 def normalize_identifier(value: str, *, fallback: str) -> str:
@@ -71,7 +72,7 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
             cleaned["dest_well"] = str(step.get("dest_well", "")).strip().upper()
         if kind == "transfer":
             cleaned["new_tip"] = str(step.get("new_tip", "once")).strip().lower() or "once"
-        if kind == "move_to":
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
             cleaned["location"] = str(step.get("location", "top")).strip().lower() or "top"
         if kind == "delay":
             cleaned["seconds"] = float(step.get("seconds", 0))
@@ -179,11 +180,16 @@ def estimate_tip_usage(raw_spec: dict[str, Any]) -> dict[str, Any]:
             "Explicit pick_up_tip wells are counted as one pickup each; verify they do not reuse skipped tips."
         )
 
+    next_tip = None
+    if 0 <= start_index + tips_used < len(tip_order):
+        next_tip = tip_order[start_index + tips_used]
+
     return {
         "tiprack_alias": pipette["tiprack_alias"],
         "tiprack_load_name": tiprack_load_name,
         "starting_tip": pipette["starting_tip"],
         "end_tip": tip_order[-1],
+        "next_tip": next_tip,
         "tips_used": tips_used,
         "available_tips": available_tips,
         "remaining_tips": max(remaining_tips, 0),
@@ -239,36 +245,42 @@ def generate_protocol_source(raw_spec: dict[str, Any]) -> tuple[str, dict[str, A
     if not steps:
         lines.append("    protocol.comment('No steps defined.')")
 
+    def location_expr(var_name: str, well_name: str, location: str) -> str:
+        if location == "bottom":
+            return f"{var_name}[{well_name!r}].bottom({_BOTTOM_CLEARANCE_MM:g})"
+        if location == "center":
+            return f"{var_name}[{well_name!r}].center()"
+        return f"{var_name}[{well_name!r}].top()"
+
     for step in steps:
         kind = step["kind"]
         if kind == "transfer":
             src = alias_map[step["source_alias"]]
             dst = alias_map[step["dest_alias"]]
+            location = step.get("location", "top")
             lines.append(
-                f"    pipette.transfer({step['volume_ul']:g}, {src}[{step['source_well']!r}], {dst}[{step['dest_well']!r}], new_tip={step['new_tip']!r})"
+                f"    pipette.transfer({step['volume_ul']:g}, {location_expr(src, step['source_well'], location)}, {location_expr(dst, step['dest_well'], location)}, new_tip={step['new_tip']!r})"
             )
         elif kind == "aspirate":
             src = alias_map[step["source_alias"]]
+            location = step.get("location", "top")
             lines.append(
-                f"    pipette.aspirate({step['volume_ul']:g}, {src}[{step['source_well']!r}])"
+                f"    pipette.aspirate({step['volume_ul']:g}, {location_expr(src, step['source_well'], location)})"
             )
         elif kind == "dispense":
             dst = alias_map[step["dest_alias"]]
+            location = step.get("location", "top")
             lines.append(
-                f"    pipette.dispense({step['volume_ul']:g}, {dst}[{step['dest_well']!r}])"
+                f"    pipette.dispense({step['volume_ul']:g}, {location_expr(dst, step['dest_well'], location)})"
             )
         elif kind == "move_to":
             src = alias_map[step["source_alias"]]
             location = step.get("location", "top")
-            if location == "bottom":
-                lines.append(f"    pipette.move_to({src}[{step['source_well']!r}].bottom())")
-            elif location == "center":
-                lines.append(f"    pipette.move_to({src}[{step['source_well']!r}].center())")
-            else:
-                lines.append(f"    pipette.move_to({src}[{step['source_well']!r}].top())")
+            lines.append(f"    pipette.move_to({location_expr(src, step['source_well'], location)})")
         elif kind == "blow_out":
             src = alias_map[step["source_alias"]]
-            lines.append(f"    pipette.blow_out({src}[{step['source_well']!r}])")
+            location = step.get("location", "top")
+            lines.append(f"    pipette.blow_out({location_expr(src, step['source_well'], location)})")
         elif kind == "delay":
             lines.append(f"    protocol.delay(seconds={step['seconds']:g})")
         elif kind == "comment":

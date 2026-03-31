@@ -355,7 +355,7 @@ class RecipeMakerTab:
         ttk.Entry(parent, width=10, textvariable=self._pump_delay_min).grid(row=2, column=5, **pad, sticky="w")
 
         ttk.Label(parent, text="Wait (sec):").grid(row=2, column=6, **pad, sticky="e")
-        self._wait_seconds = tk.DoubleVar(value=10.0)
+        self._wait_seconds = tk.DoubleVar(value=11.0)
         ttk.Entry(parent, width=10, textvariable=self._wait_seconds).grid(row=2, column=7, **pad, sticky="w")
 
         ttk.Label(parent, text="Target ETA (s):").grid(row=3, column=0, **pad, sticky="e")
@@ -437,7 +437,7 @@ class RecipeMakerTab:
                 volume=self._safe_float_var(self._pump_volume, FLOWCELL_FILL_VOLUME_UL),
                 delay_min=self._safe_float_var(self._pump_delay_min, 0.0),
                 cmd=(self._pump_raw_cmd.get() or "").strip(),
-                wait=self._safe_float_var(self._wait_seconds, 10.0),
+                wait=self._safe_float_var(self._wait_seconds, 11.0),
                 alert=(self._alert_message.get() or "").strip(),
                 target_eta_s=self._safe_float_var(self._pump_target_eta_s, FLOWCELL_FILL_TARGET_S),
                 track_collection=bool(self._pump_track_collection.get()),
@@ -1308,7 +1308,7 @@ class RecipeMakerTab:
                 "volume": 25.0,
                 "delay_min": 0.0,
                 "cmd": "",
-                "wait": float(item.get("pause_seconds", 10.0)),
+                "wait": float(item.get("pause_seconds", 11.0)),
                 "alert": "Check setup",
                 "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
                 "track_collection": False,
@@ -1325,7 +1325,7 @@ class RecipeMakerTab:
                 "volume": 25.0,
                 "delay_min": 0.0,
                 "cmd": "",
-                "wait": 10.0,
+                "wait": 11.0,
                 "alert": str(item.get("alert_message") or ""),
                 "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
                 "track_collection": False,
@@ -1345,7 +1345,7 @@ class RecipeMakerTab:
             "volume": float(params.get("volume", 25.0)),
             "delay_min": float(params.get("delay_min", 0.0)),
             "cmd": str(params.get("cmd", "")),
-            "wait": 10.0,
+            "wait": 11.0,
             "alert": "Check setup",
             "target_eta_s": float(params.get("target_eta_s", FLOWCELL_FILL_TARGET_S)),
             "track_collection": bool(params.get("track_collection", False)),
@@ -1564,7 +1564,7 @@ class RecipeMakerTab:
                     volume=self._safe_float_var(volume_var, FLOWCELL_FILL_VOLUME_UL),
                     delay_min=self._safe_float_var(delay_var, 0.0),
                     cmd=(cmd_var.get() or "").strip(),
-                    wait=self._safe_float_var(wait_var, 10.0),
+                    wait=self._safe_float_var(wait_var, 11.0),
                     alert=(alert_var.get() or "").strip(),
                     target_eta_s=self._safe_float_var(target_eta_var, FLOWCELL_FILL_TARGET_S),
                     track_collection=bool(track_collection_var.get()),

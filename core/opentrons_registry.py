@@ -30,7 +30,7 @@ class OpentronsRegistry:
         source: str,
         params: Optional[dict] = None,
         note: Optional[str] = None,
-    ) -> Tuple[Path, str]:
+    ) -> Tuple[Path, str, bool]:
         if params is None:
             params = {"_source_hash": hashlib.sha1(source.encode("utf-8")).hexdigest()[:12]}
         key = compute_hash(kind, params)
@@ -40,7 +40,7 @@ class OpentronsRegistry:
             if note is not None:
                 update_note(key, note)
             self._log(f"[Opentrons Library] Session hit '{filename}' ({key})")
-            return path, filename
+            return path, filename, False
 
         lib_path = lookup(key)
         if lib_path is not None:
@@ -50,14 +50,14 @@ class OpentronsRegistry:
             if note is not None:
                 update_note(key, note)
             self._log(f"[Opentrons Library] Found '{filename}' ({key})")
-            return lib_path, filename
+            return lib_path, filename, False
 
         lib_path = register(key, kind, params, source, note=note)
         filename = lib_path.name
         self._registry[key] = (lib_path, filename)
         self._path_to_key[str(lib_path)] = key
         self._log(f"[Opentrons Library] Saved new '{filename}' ({key})")
-        return lib_path, filename
+        return lib_path, filename, True
 
     def hash_key_for(self, filepath) -> str:
         return self._path_to_key.get(str(filepath), "-")

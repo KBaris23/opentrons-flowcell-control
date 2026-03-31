@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -11,6 +12,26 @@ from typing import Optional
 from config import OPENTRONS_LIBRARY_DIR, OPENTRONS_LIBRARY_MAP_FILE, OPENTRONS_PROTOCOLS_DIR
 
 _map: dict = {}
+
+
+def _filename_stem_from_note(note: Optional[str], fallback: str) -> str:
+    raw = str(note or "").strip() or fallback
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", raw)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip().rstrip(".")
+    return cleaned or fallback
+
+
+def _unique_library_path(stem: str) -> Path:
+    base = Path(OPENTRONS_LIBRARY_DIR)
+    candidate = base / f"{stem}.py"
+    if not candidate.exists():
+        return candidate
+    index = 1
+    while True:
+        candidate = base / f"{stem} ({index}).py"
+        if not candidate.exists():
+            return candidate
+        index += 1
 
 
 def _ensure_dirs() -> None:
@@ -68,7 +89,8 @@ def lookup(hash_key: str) -> Optional[Path]:
 
 def register(hash_key: str, kind: str, params: dict, source: str, note: Optional[str] = None) -> Path:
     _ensure_dirs()
-    path = Path(OPENTRONS_LIBRARY_DIR) / f"{hash_key}.py"
+    stem = _filename_stem_from_note(note, fallback=hash_key)
+    path = _unique_library_path(stem)
     path.write_text(source, encoding="utf-8")
     _map[hash_key] = {
         "kind": kind,

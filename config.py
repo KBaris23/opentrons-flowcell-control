@@ -46,6 +46,7 @@ BLOCKS_DIR      = Path("recipe_maker") / "default_blocks"  # where block definit
 OPENTRONS_PROTOCOLS_DIR = Path("opentrons_protocols")      # bundled / curated OT-2 protocol files
 OPENTRONS_LIBRARY_DIR = OPENTRONS_PROTOCOLS_DIR / "library"
 OPENTRONS_LIBRARY_MAP_FILE = OPENTRONS_PROTOCOLS_DIR / "library_map.json"
+OPENTRONS_TIP_STATE_FILE = DATA_DIR / "opentrons_tip_state_registry.json"
 SAVE_DATED_METHOD_COPIES = False            # if True, also write methods/YYYY-MM-DD/*.ms working copies
 #keep in mind that methods are already double saved under library and the experiments where they are used
 

@@ -9,6 +9,7 @@ import sys
 import threading
 import hashlib
 from pathlib import Path
+import json
 from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk
@@ -25,11 +26,23 @@ from robot import (
     generate_protocol_source,
     summarize_protocol_spec,
 )
-from robot.opentrons_builder import spec_hash_params
+from robot.opentrons_builder import normalize_protocol_spec, spec_hash_params, tiprack_well_order
 
 
 class OpentronsTab:
     """File-based and UI-native Opentrons protocol workflows."""
+
+    _OTHER_LABWARE_SENTINEL = "Other..."
+    _LOCAL_LABWARE_DEF_ROOT = (
+        Path(".venv")
+        / "Lib"
+        / "site-packages"
+        / "opentrons_shared_data"
+        / "data"
+        / "labware"
+        / "definitions"
+        / "2"
+    )
 
     _MODE_LABELS = {
         "validate": "Validate Only",
@@ -51,14 +64,19 @@ class OpentronsTab:
         "pause",
     ]
 
-    _LABWARE_LOAD_NAME_PRESETS = [
+    _COMMON_LABWARE_LOAD_NAME_PRESETS = [
         "opentrons_96_filtertiprack_20ul",
-        "opentrons_96_filtertiprack_200ul",
-        "opentrons_96_filtertiprack_1000ul",
         "opentrons_24_tuberack_nest_2ml_snapcap",
         "opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap",
-        "opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical",
+        "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap",
+        "opentrons_6_tuberack_falcon_50ml_conical",
+        "opentrons_6_tuberack_nest_50ml_conical",
         "opentrons_15_tuberack_falcon_15ml_conical",
+        "opentrons_15_tuberack_nest_15ml_conical",
+        "opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical",
+        "opentrons_10_tuberack_nest_4x50ml_6x15ml_conical",
+        "opentrons_96_filtertiprack_200ul",
+        "opentrons_96_filtertiprack_1000ul",
     ]
     _PIPETTE_MAX_VOLUME_UL = {
         "p20_single_gen2": 20.0,
@@ -88,6 +106,8 @@ class OpentronsTab:
         self._step_clipboard: list[dict] = []
         self._selected_labware_index: int | None = None
         self._selected_step_index: int | None = None
+        self._available_labware_load_names = self._discover_labware_load_names()
+        self._all_labware_load_names = self._labware_load_name_options_static()
 
         self._build()
         self._seed_builder_defaults()
@@ -95,6 +115,7 @@ class OpentronsTab:
         self._refresh_labware_name_options()
         self._refresh_labware_tree()
         self._refresh_step_tree()
+        self._apply_tracked_starting_tip(force=True)
         self.preview_builder_protocol()
 
     def _build(self) -> None:
@@ -300,6 +321,7 @@ class OpentronsTab:
         self._builder_mount = tk.StringVar(value="left")
         self._builder_tiprack_alias = tk.StringVar(value="tips")
         self._builder_starting_tip = tk.StringVar(value="A1")
+        self._builder_auto_tip_tracking = tk.BooleanVar(value=True)
         self._builder_tip_budget_var = tk.StringVar(
             value="Tip budget: 0 pickup(s) requested; 96 tip(s) available from A1 to H12; 96 tip(s) left."
         )
@@ -381,13 +403,22 @@ class OpentronsTab:
             values=self._TIP_WELL_OPTIONS,
             width=10,
         ).grid(row=3, column=3, padx=4, pady=4, sticky="w")
+        ttk.Checkbutton(
+            meta,
+            text="Auto-advance tip",
+            variable=self._builder_auto_tip_tracking,
+            command=self._apply_tracked_starting_tip,
+        ).grid(row=4, column=2, padx=4, pady=(0, 4), sticky="w")
+        ttk.Button(meta, text="Reset Tip Tracker", command=self._reset_builder_tip_tracker).grid(
+            row=4, column=3, padx=4, pady=(0, 4), sticky="w"
+        )
         ttk.Label(
             meta,
             textvariable=self._builder_tip_budget_var,
             foreground="#666",
             wraplength=900,
             justify="left",
-        ).grid(row=4, column=0, columnspan=6, padx=4, pady=(0, 4), sticky="w")
+        ).grid(row=5, column=0, columnspan=6, padx=4, pady=(0, 4), sticky="w")
 
         self._build_labware_panel(deck_wrap)
 
@@ -454,6 +485,7 @@ class OpentronsTab:
             values=self._labware_load_name_options(),
         )
         self._combo_labware_name.grid(row=1, column=1, columnspan=3, padx=2, pady=2, sticky="ew")
+        self._combo_labware_name.bind("<<ComboboxSelected>>", self._on_labware_name_selected)
         ttk.Label(form, text="Slot").grid(row=0, column=4, padx=2, pady=2, sticky="w")
         ttk.Entry(form, textvariable=self._labware_slot_var, width=8).grid(row=1, column=4, padx=2, pady=2, sticky="ew")
 
@@ -622,8 +654,162 @@ class OpentronsTab:
             for entry in self._labware_rows
             if str(entry.get("load_name", "")).strip()
         }
-        names.update(self._LABWARE_LOAD_NAME_PRESETS)
-        return sorted(names)
+        common = [
+            name
+            for name in self._COMMON_LABWARE_LOAD_NAME_PRESETS
+            if name in self._all_labware_load_names or name in names
+        ]
+        extras = sorted(
+            name
+            for name in names.union(self._available_labware_load_names)
+            if name not in common
+        )
+        options = [*common]
+        if extras:
+            options.append(self._OTHER_LABWARE_SENTINEL)
+        return options
+
+    @classmethod
+    def _discover_labware_load_names(cls) -> set[str]:
+        root = cls._LOCAL_LABWARE_DEF_ROOT
+        if not root.exists():
+            return set()
+        names: set[str] = set()
+        for definition_dir in root.iterdir():
+            if not definition_dir.is_dir():
+                continue
+            latest_definition: Path | None = None
+            for candidate in sorted(definition_dir.glob("*.json")):
+                latest_definition = candidate
+            if latest_definition is None:
+                continue
+            try:
+                payload = json.loads(latest_definition.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            load_name = str(payload.get("parameters", {}).get("loadName", "")).strip()
+            if load_name:
+                names.add(load_name)
+        return names
+
+    @classmethod
+    def _fifty_ml_rack_variants(cls) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name in cls._labware_load_name_options_static()
+            if "50ml_conical" in name
+        )
+
+    @classmethod
+    def _labware_load_name_options_static(cls) -> set[str]:
+        names = set(cls._COMMON_LABWARE_LOAD_NAME_PRESETS)
+        names.update(cls._discover_labware_load_names())
+        return names
+
+    @classmethod
+    def _labware_name_warning(cls, load_name: str) -> str | None:
+        name = (load_name or "").strip()
+        if not name:
+            return None
+        known = cls._labware_load_name_options_static()
+        if name not in known:
+            return (
+                "This load name is not present in the local Opentrons labware list. "
+                "A mismatched load name can make the OT-2 move with the wrong rack geometry."
+            )
+        if "tuberack" in name and "50ml" in name:
+            variants = ", ".join(cls._fifty_ml_rack_variants())
+            return (
+                "50 mL tube racks have multiple Opentrons definitions. "
+                f"Double-check that the physical rack matches this exact load name: {name}. "
+                f"Local 50 mL options: {variants}."
+            )
+        return None
+
+    def _other_labware_load_names(self) -> list[str]:
+        common = set(self._COMMON_LABWARE_LOAD_NAME_PRESETS)
+        dynamic = {
+            str(entry.get("load_name", "")).strip()
+            for entry in self._labware_rows
+            if str(entry.get("load_name", "")).strip()
+        }
+        return sorted((self._all_labware_load_names | dynamic) - common)
+
+    def _on_labware_name_selected(self, _event=None) -> None:
+        if (self._labware_name_var.get() or "").strip() != self._OTHER_LABWARE_SENTINEL:
+            return
+        selected = self._choose_other_labware_load_name()
+        self._labware_name_var.set(selected or "")
+
+    def _choose_other_labware_load_name(self) -> str | None:
+        options = self._other_labware_load_names()
+        if not options:
+            messagebox.showinfo("No Additional Labware", "No additional labware definitions were found.")
+            return None
+
+        dialog = tk.Toplevel(self._root)
+        dialog.title("Choose Other Labware")
+        dialog.transient(self._root)
+        dialog.grab_set()
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        dialog.minsize(560, 420)
+
+        filter_var = tk.StringVar()
+        selection: dict[str, str | None] = {"value": None}
+
+        ttk.Label(
+            dialog,
+            text="Choose another labware definition. The main dropdown keeps the common current options on top.",
+            wraplength=520,
+            justify="left",
+        ).grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
+
+        body = ttk.Frame(dialog)
+        body.grid(row=1, column=0, sticky="nsew", padx=10, pady=4)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(1, weight=1)
+
+        ttk.Entry(body, textvariable=filter_var).grid(row=0, column=0, sticky="ew", pady=(0, 6))
+
+        listbox = tk.Listbox(body, activestyle="dotbox")
+        listbox.grid(row=1, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(body, orient="vertical", command=listbox.yview)
+        scroll.grid(row=1, column=1, sticky="ns")
+        listbox.configure(yscrollcommand=scroll.set)
+
+        def refresh(*_args) -> None:
+            query = (filter_var.get() or "").strip().lower()
+            visible = [name for name in options if query in name.lower()]
+            listbox.delete(0, tk.END)
+            for name in visible:
+                listbox.insert(tk.END, name)
+            if visible:
+                listbox.selection_set(0)
+                listbox.activate(0)
+
+        def accept(_event=None) -> None:
+            sel = listbox.curselection()
+            if not sel:
+                return
+            selection["value"] = str(listbox.get(sel[0]))
+            dialog.destroy()
+
+        def cancel() -> None:
+            dialog.destroy()
+
+        filter_var.trace_add("write", refresh)
+        listbox.bind("<Double-Button-1>", accept)
+        listbox.bind("<Return>", accept)
+
+        buttons = ttk.Frame(dialog)
+        buttons.grid(row=2, column=0, sticky="e", padx=10, pady=(6, 10))
+        ttk.Button(buttons, text="Cancel", command=cancel).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Select", command=accept).pack(side="left", padx=4)
+
+        refresh()
+        dialog.wait_window()
+        return selection["value"]
 
     def _refresh_labware_name_options(self) -> None:
         if hasattr(self, "_combo_labware_name"):
@@ -636,6 +822,97 @@ class OpentronsTab:
     def _set_tip_budget_message(self, message: str) -> None:
         if hasattr(self, "_builder_tip_budget_var"):
             self._builder_tip_budget_var.set(message)
+
+    def _builder_tracker_context(self, spec: dict) -> tuple[str, dict] | tuple[None, None]:
+        try:
+            normalized = normalize_protocol_spec(spec)
+        except Exception:
+            return None, None
+        pipette = normalized["pipette"]
+        tiprack_entry = next(
+            (entry for entry in normalized["labware"] if entry["alias"] == pipette["tiprack_alias"]),
+            None,
+        )
+        if tiprack_entry is None:
+            return None, None
+        if tiprack_well_order(tiprack_entry["load_name"]) is None:
+            return None, None
+        context = {
+            "robot_type": normalized["metadata"]["robot_type"],
+            "pipette_model": pipette["model"],
+            "mount": pipette["mount"],
+            "tiprack_alias": pipette["tiprack_alias"],
+            "tiprack_load_name": tiprack_entry["load_name"],
+            "tiprack_slot": tiprack_entry["slot"],
+        }
+        tracker_key = "|".join(
+            [
+                context["robot_type"],
+                context["pipette_model"],
+                context["mount"],
+                context["tiprack_load_name"],
+                context["tiprack_slot"],
+            ]
+        )
+        return tracker_key, context
+
+    def _tracked_builder_tip_state(self, spec: dict | None = None) -> tuple[str, dict, dict] | tuple[None, None, None]:
+        tracker_key, context = self._builder_tracker_context(spec or self._builder_spec())
+        if not tracker_key:
+            return None, None, None
+        state = self._session.opentrons_tip_registry.snapshot(tracker_key)
+        return tracker_key, context, state
+
+    def _apply_tracked_starting_tip(self, *, force: bool = False) -> None:
+        if not bool(self._builder_auto_tip_tracking.get()):
+            return
+        tracker_key, _context, state = self._tracked_builder_tip_state()
+        if not tracker_key or not state:
+            return
+        next_tip = str(state.get("next_tip") or "").strip().upper()
+        if not next_tip:
+            return
+        current = str(self._builder_starting_tip.get() or "").strip().upper()
+        if force or current in {"", "A1"}:
+            self._builder_starting_tip.set(next_tip)
+
+    def _record_builder_tip_usage(self, spec: dict, *, event_name: str) -> dict | None:
+        tracker_key, context, _state = self._tracked_builder_tip_state(spec)
+        if not tracker_key or not context:
+            return None
+        usage = estimate_tip_usage(spec)
+        if usage.get("available_tips") is None or usage.get("over_capacity"):
+            return None
+        tips_used = int(usage.get("tips_used", 0) or 0)
+        if tips_used <= 0:
+            return None
+        return self._session.opentrons_tip_registry.record_protocol(
+            tracker_key=tracker_key,
+            protocol_name=str(spec.get("metadata", {}).get("protocol_name", "")),
+            starting_tip=str(usage.get("starting_tip") or ""),
+            tips_used=tips_used,
+            next_tip=str(usage.get("next_tip") or ""),
+            context=context,
+            event_name=event_name,
+        )
+
+    def _reset_builder_tip_tracker(self) -> None:
+        tracker_key, context, _state = self._tracked_builder_tip_state()
+        if not tracker_key or not context:
+            messagebox.showwarning(
+                "Tip Tracker Unavailable",
+                "Add a standard 96-well tiprack to the builder before resetting tip tracking.",
+            )
+            return
+        state = self._session.opentrons_tip_registry.reset_tiprack(
+            tracker_key=tracker_key,
+            next_tip="A1",
+            context=context,
+            reason="manual builder reset",
+        )
+        self._builder_starting_tip.set(str(state.get("next_tip") or "A1"))
+        self.preview_builder_protocol()
+        self.log("[Opentrons Tip Tracker] Reset tracked starting tip to A1 for the current tiprack setup.")
 
     @staticmethod
     def _merge_warning_lists(base_warnings: list[str], extra_warnings: list[str]) -> list[str]:
@@ -666,6 +943,10 @@ class OpentronsTab:
             f"{available_tips} tip(s) available from {usage.get('starting_tip')} to {usage.get('end_tip')}; "
             f"{usage.get('remaining_tips', 0)} tip(s) left."
         )
+        if usage.get("next_tip"):
+            message += f" Next suggested tip: {usage.get('next_tip')}."
+        elif usage.get("tips_used", 0):
+            message += " This protocol would consume the remaining tracked tips."
         if usage.get("over_capacity"):
             short_by = max(int(usage.get("tips_used", 0)) - int(available_tips), 0)
             message += f" Short by {short_by} tip(s)."
@@ -727,7 +1008,7 @@ class OpentronsTab:
                 self._validate_well(well, "Tip well")
                 step["source_well"] = well
 
-        if kind == "move_to":
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
             location = str(step.get("location", "")).strip().lower()
             if location not in {"top", "center", "bottom"}:
                 raise ValueError("Location must be top, center, or bottom.")
@@ -917,6 +1198,7 @@ class OpentronsTab:
         self._refresh_labware_name_options()
         self._refresh_labware_tree()
         self._refresh_step_tree()
+        self._apply_tracked_starting_tip(force=False)
         self.preview_builder_protocol()
 
     def _apply_builder_summary_placeholder(self, warning: str = "Builder is empty.") -> None:
@@ -1313,6 +1595,9 @@ class OpentronsTab:
         if not alias or not load_name or not slot:
             messagebox.showwarning("Missing Labware", "Alias, load name, and slot are required.")
             return
+        warning = self._labware_name_warning(load_name)
+        if warning:
+            messagebox.showwarning("Check Labware Definition", warning)
         row = {"alias": alias, "load_name": load_name, "slot": slot}
         if self._selected_labware_index is None:
             self._labware_rows.append(row)
@@ -1321,6 +1606,7 @@ class OpentronsTab:
         self._selected_labware_index = None
         self._refresh_labware_name_options()
         self._refresh_labware_tree()
+        self._apply_tracked_starting_tip(force=False)
         self.preview_builder_protocol()
 
     def _delete_labware(self) -> None:
@@ -1330,6 +1616,7 @@ class OpentronsTab:
         self._selected_labware_index = None
         self._refresh_labware_name_options()
         self._refresh_labware_tree()
+        self._apply_tracked_starting_tip(force=False)
         self.preview_builder_protocol()
 
     def _on_step_selected(self, _event=None) -> None:
@@ -1365,7 +1652,7 @@ class OpentronsTab:
             step["dest_well"] = (self._step_dest_well_var.get() or "").strip().upper()
         if kind == "transfer":
             step["new_tip"] = (self._step_new_tip_var.get() or "once").strip().lower()
-        if kind == "move_to":
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
             step["location"] = (self._step_location_var.get() or "top").strip().lower()
         if kind == "delay":
             step["seconds"] = float(self._step_seconds_var.get())
@@ -1595,7 +1882,7 @@ class OpentronsTab:
             return
         params = spec_hash_params(spec)
         protocol_name = spec["metadata"]["protocol_name"]
-        path, filename = self._session.opentrons_registry.save_protocol(
+        path, filename, created = self._session.opentrons_registry.save_protocol(
             kind="generated_ui_protocol",
             source=source,
             params=params,
@@ -1603,6 +1890,15 @@ class OpentronsTab:
         )
         self._load_protocol_files()
         self._var_path.set(str(path))
+        tip_state = self._record_builder_tip_usage(spec, event_name="protocol_saved") if created else None
+        if tip_state is not None and bool(self._builder_auto_tip_tracking.get()):
+            next_tip = str(tip_state.get("next_tip") or "").strip().upper()
+            if next_tip:
+                self._builder_starting_tip.set(next_tip)
+                self.preview_builder_protocol()
+                self.log(f"[Opentrons Tip Tracker] Advanced next starting tip to {next_tip}.")
+        elif not created:
+            self.log("[Opentrons Tip Tracker] Existing saved protocol reused; tracked tip was not advanced.")
         self.log(f"[Opentrons Builder] Saved to library: {filename}")
         messagebox.showinfo("Saved", f"Protocol saved to library as:\n{filename}")
 
@@ -1614,16 +1910,24 @@ class OpentronsTab:
                 f"{step.get('volume_ul', 0):g} uL "
                 f"{step.get('source_alias')}:{step.get('source_well')} -> "
                 f"{step.get('dest_alias')}:{step.get('dest_well')} "
-                f"(new_tip={step.get('new_tip', 'once')})"
+                f"(new_tip={step.get('new_tip', 'once')}, location={step.get('location', 'top')})"
             )
         if kind == "move_to":
             return f"{step.get('source_alias')}:{step.get('source_well')} {step.get('location', 'top')}"
         if kind == "aspirate":
-            return f"{step.get('volume_ul', 0):g} uL from {step.get('source_alias')}:{step.get('source_well')}"
+            return (
+                f"{step.get('volume_ul', 0):g} uL from "
+                f"{step.get('source_alias')}:{step.get('source_well')} "
+                f"({step.get('location', 'top')})"
+            )
         if kind == "dispense":
-            return f"{step.get('volume_ul', 0):g} uL to {step.get('dest_alias')}:{step.get('dest_well')}"
+            return (
+                f"{step.get('volume_ul', 0):g} uL to "
+                f"{step.get('dest_alias')}:{step.get('dest_well')} "
+                f"({step.get('location', 'top')})"
+            )
         if kind == "blow_out":
-            return f"at {step.get('source_alias')}:{step.get('source_well')}"
+            return f"at {step.get('source_alias')}:{step.get('source_well')} ({step.get('location', 'top')})"
         if kind == "delay":
             return f"{step.get('seconds', 0):g} second(s)"
         if kind == "comment":

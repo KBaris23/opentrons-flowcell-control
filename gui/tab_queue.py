@@ -445,7 +445,7 @@ class QueueTab:
                 "volume": 25.0,
                 "delay_min": 0.0,
                 "cmd": "",
-                "wait": float(item.get("pause_seconds", 10.0)),
+                "wait": float(item.get("pause_seconds", 11.0)),
                 "alert": "Check setup",
                 "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
                 "track_collection": False,
@@ -462,7 +462,7 @@ class QueueTab:
                 "volume": 25.0,
                 "delay_min": 0.0,
                 "cmd": "",
-                "wait": 10.0,
+                "wait": 11.0,
                 "alert": str(item.get("alert_message") or ""),
                 "target_eta_s": float(FLOWCELL_FILL_TARGET_S),
                 "track_collection": False,
@@ -482,7 +482,7 @@ class QueueTab:
             "volume": float(params.get("volume", 25.0)),
             "delay_min": float(params.get("delay_min", 0.0)),
             "cmd": str(params.get("cmd", "")),
-            "wait": 10.0,
+            "wait": 11.0,
             "alert": "Check setup",
             "target_eta_s": float(params.get("target_eta_s", FLOWCELL_FILL_TARGET_S)),
             "track_collection": bool(params.get("track_collection", False)),
@@ -1245,7 +1245,7 @@ class QueueTab:
             f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
         )
         self._announce_queue_start(start_index=0)
-        self._copy_queue_file("run_queue")
+        self._copy_queue_file_async("run_queue")
         self._queue_thread = threading.Thread(
             target=self._execute_queue, args=(0,), daemon=True
         )
@@ -1291,7 +1291,7 @@ class QueueTab:
             f"{self._session.collection_capacity_ul / 1000.0:.1f} mL"
         )
         self._announce_queue_start(start_index=idx)
-        self._copy_queue_file("run_queue_from_selected")
+        self._copy_queue_file_async("run_queue_from_selected")
         self._queue_thread = threading.Thread(
             target=self._execute_queue, args=(idx,), daemon=True
         )
@@ -1645,11 +1645,12 @@ class QueueTab:
         except Exception as exc:
             self.log(f"Warning: failed to adjust script for MUX ch {mux_channel}: {exc}")
 
-    def _queue_payload(self) -> dict:
+    def _queue_payload(self, items: list[dict] | None = None) -> dict:
+        queue_items = items if items is not None else self._session.measurement_queue
         return {
             "metadata": {"saved_at": datetime.now().isoformat(timespec="seconds"),
                          "version": 1},
-            "items": [self._serialize(i) for i in self._session.measurement_queue],
+            "items": [self._serialize(i) for i in queue_items],
         }
 
     def _copy_queue_file(self, prefix: str):
@@ -1674,6 +1675,35 @@ class QueueTab:
             self.log(f"Queue file copied to: {dst}")
         except Exception as exc:
             self.log(f"Queue file copy failed: {exc}")
+
+    def _copy_queue_file_async(self, prefix: str) -> None:
+        snapshot = copy.deepcopy(list(self._session.measurement_queue))
+
+        def _worker() -> None:
+            session_mgr = getattr(self._session, "session_manager", None)
+            exp_path = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
+            if exp_path is None:
+                return
+            try:
+                queue_dir = Path(exp_path) / "queue_files"
+                queue_dir.mkdir(parents=True, exist_ok=True)
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                suffix = ""
+                if self._last_queue_path:
+                    try:
+                        suffix = f"_{Path(self._last_queue_path).name}"
+                    except Exception:
+                        suffix = ""
+                filename = f"{prefix}_{ts}{suffix}"
+                dst = queue_dir / filename
+                payload = self._queue_payload(snapshot)
+                with open(dst, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, indent=2)
+                self.log(f"Queue file copied to: {dst}")
+            except Exception as exc:
+                self.log(f"Queue file copy failed: {exc}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     @staticmethod
     def _extract_mux_channel(item: dict) -> Optional[int]:
@@ -1931,6 +1961,7 @@ class QueueTab:
                 "robot_port": robot_port,
                 "queue_index": queue_index,
             }
+            self.log(f"[Opentrons] Stored paused run under resume key {resume_key}.")
             self.log(f"[Opentrons] Queue deferred paused protocol: {protocol_name}")
             return "paused"
 
@@ -1946,8 +1977,22 @@ class QueueTab:
         if not resume_key:
             self.log("Invalid Opentrons resume item: missing resume_key.")
             return "failed"
+        self.log(f"[Opentrons] Resume requested with key {resume_key} for {protocol_name}.")
 
         paused = self._opentrons_paused_runs.get(resume_key)
+        resolved_resume_key = resume_key
+        if not paused:
+            matches = [
+                (key, entry)
+                for key, entry in self._opentrons_paused_runs.items()
+                if str(entry.get("protocol_name") or "").strip() == protocol_name
+            ]
+            if len(matches) == 1:
+                resolved_resume_key, paused = matches[0]
+                self.log(
+                    "[Opentrons] Resume key mismatch; "
+                    f"falling back to the only paused run for {protocol_name}."
+                )
         if not paused:
             self.log(f"[Opentrons] No paused run available for resume: {protocol_name}")
             return "failed"
@@ -1977,7 +2022,7 @@ class QueueTab:
             self._session.current_stop_callback = None
 
         if result.state == "paused":
-            self._opentrons_paused_runs[resume_key] = {
+            self._opentrons_paused_runs[resolved_resume_key] = {
                 "run_id": result.run_id,
                 "protocol_name": protocol_name,
                 "robot_host": robot_host,
@@ -2000,7 +2045,7 @@ class QueueTab:
             self._session.measurement_queue[origin_index]["status"] = (
                 "completed" if result.ok else ("stopped" if result.state == "stopped" else "failed")
             )
-        self._opentrons_paused_runs.pop(resume_key, None)
+        self._opentrons_paused_runs.pop(resolved_resume_key, None)
         self._active_opentrons_target = None
         return "completed" if result.ok else ("stopped" if result.state == "stopped" else "failed")
 

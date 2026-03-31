@@ -3,44 +3,48 @@
     {
       "type": "OPENTRONS_PROTOCOL",
       "status": "pending",
-      "details": "Opentrons ROBOT generated_ui_protocol_9af2ec.py [pause-aware]",
+      "details": "Opentrons ROBOT Titration_5x5uL.py [pause-aware]",
       "opentrons_action": {
         "name": "PROTOCOL",
         "params": {
           "mode": "robot",
           "protocol_name": "Titration_5x5uL",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\generated_ui_protocol_9af2ec.py",
-          "resume_key": "25eb57a4647039ca",
-          "supports_pause": true
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_5x5uL.py",
+          "protocol_source": "\"\"\"Generated Opentrons protocol.\"\"\"\n\nfrom opentrons import protocol_api\n\nmetadata = {\n    \"protocolName\": 'Titration_5x5uL',\n    \"author\": 'Opentrons Flowcell Console',\n    \"description\": '5-step titration, pause after each addition',\n    \"source\": \"opentrons-flowcell-control-ui\",\n    \"apiLevel\": '2.19',\n}\n\nrequirements = {\n    \"robotType\": 'OT-2',\n}\n\n\ndef run(protocol: protocol_api.ProtocolContext):\n    tips = protocol.load_labware('opentrons_96_filtertiprack_20ul', '7')\n    stock = protocol.load_labware('opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap', '2')\n    dilute = protocol.load_labware('opentrons_6_tuberack_falcon_50ml_conical', '3')\n    pipette = protocol.load_instrument('p20_single_gen2', 'left', tip_racks=[tips])\n    pipette.starting_tip = tips['D4']\n\n    protocol.comment('Titration step 1')\n    pipette.transfer(5, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('Run syringe pull and SWV for titration step, then resume.')\n    protocol.comment('Titration step 2')\n    pipette.transfer(5, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('Run syringe pull and SWV for titration step, then resume.')\n    protocol.comment('Titration step 3')\n    pipette.transfer(5, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('Run syringe pull and SWV for titration step, then resume.')\n    protocol.comment('Titration step 4')\n    pipette.transfer(5, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('Run syringe pull and SWV for titration step, then resume.')\n    protocol.comment('Titration step 5')\n    pipette.transfer(5, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.comment('Titrations complete')\n",
+          "resume_key": "09fb6762d56d8efa",
+          "supports_pause": true,
+          "robot_host": "169.254.229.52",
+          "robot_port": 31950
         }
       }
     },
     {
       "type": "PUMP_HEXW2",
       "status": "pending",
-      "details": "Pump: HEXW2 withdraw 225 @ 1350 (uLmin) | eta 10.0s",
+      "details": "Pump: HEXW2 withdraw 250 @ 1500 (uLmin) | eta 10.0s | collect 0.250 mL | warn 4.5/5 mL",
       "pump_action": {
         "name": "HEXW2",
         "params": {
           "units": "uLmin",
           "mode": "withdraw",
           "diameter_mm": 12.1,
-          "volume": 225.0,
-          "rate": 1350.0,
+          "volume": 250.0,
+          "rate": 1500.0,
           "delay_min": 0.0,
           "start": true,
           "target_eta_s": 10.0,
-          "track_collection": false,
+          "track_collection": true,
           "collection_capacity_ml": 5.0,
           "collection_warn_ml": 4.5
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 1",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -63,7 +67,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 2",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -86,7 +90,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 3",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -109,7 +113,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 4",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -132,7 +136,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 5",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -155,7 +159,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 6",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -178,7 +182,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 7",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -201,7 +205,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 8",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -224,7 +228,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 9",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -247,7 +251,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 10",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -274,36 +278,38 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_5x5uL",
-          "resume_key": "25eb57a4647039ca"
+          "resume_key": "bf73e03360f7be6d"
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "PUMP_HEXW2",
       "status": "pending",
-      "details": "Pump: HEXW2 withdraw 225 @ 1350 (uLmin) | eta 10.0s",
+      "details": "Pump: HEXW2 withdraw 250 @ 1500 (uLmin) | eta 10.0s | collect 0.250 mL | warn 4.5/5 mL",
       "pump_action": {
         "name": "HEXW2",
         "params": {
           "units": "uLmin",
           "mode": "withdraw",
           "diameter_mm": 12.1,
-          "volume": 225.0,
-          "rate": 1350.0,
+          "volume": 250.0,
+          "rate": 1500.0,
           "delay_min": 0.0,
           "start": true,
           "target_eta_s": 10.0,
-          "track_collection": false,
+          "track_collection": true,
           "collection_capacity_ml": 5.0,
           "collection_warn_ml": 4.5
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 1",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -326,7 +332,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 2",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -349,7 +355,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 3",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -372,7 +378,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 4",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -395,7 +401,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 5",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -418,7 +424,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 6",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -441,7 +447,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 7",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -464,7 +470,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 8",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -487,7 +493,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 9",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -510,7 +516,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 10",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -537,36 +543,38 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_5x5uL",
-          "resume_key": "25eb57a4647039ca"
+          "resume_key": "bf73e03360f7be6d"
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "PUMP_HEXW2",
       "status": "pending",
-      "details": "Pump: HEXW2 withdraw 225 @ 1350 (uLmin) | eta 10.0s",
+      "details": "Pump: HEXW2 withdraw 250 @ 1500 (uLmin) | eta 10.0s | collect 0.250 mL | warn 4.5/5 mL",
       "pump_action": {
         "name": "HEXW2",
         "params": {
           "units": "uLmin",
           "mode": "withdraw",
           "diameter_mm": 12.1,
-          "volume": 225.0,
-          "rate": 1350.0,
+          "volume": 250.0,
+          "rate": 1500.0,
           "delay_min": 0.0,
           "start": true,
           "target_eta_s": 10.0,
-          "track_collection": false,
+          "track_collection": true,
           "collection_capacity_ml": 5.0,
           "collection_warn_ml": 4.5
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 1",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -589,7 +597,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 2",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -612,7 +620,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 3",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -635,7 +643,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 4",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -658,7 +666,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 5",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -681,7 +689,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 6",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -704,7 +712,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 7",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -727,7 +735,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 8",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -750,7 +758,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 9",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -773,7 +781,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 10",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -800,36 +808,38 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_5x5uL",
-          "resume_key": "25eb57a4647039ca"
+          "resume_key": "bf73e03360f7be6d"
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "PUMP_HEXW2",
       "status": "pending",
-      "details": "Pump: HEXW2 withdraw 225 @ 1350 (uLmin) | eta 10.0s",
+      "details": "Pump: HEXW2 withdraw 250 @ 1500 (uLmin) | eta 10.0s | collect 0.250 mL | warn 4.5/5 mL",
       "pump_action": {
         "name": "HEXW2",
         "params": {
           "units": "uLmin",
           "mode": "withdraw",
           "diameter_mm": 12.1,
-          "volume": 225.0,
-          "rate": 1350.0,
+          "volume": 250.0,
+          "rate": 1500.0,
           "delay_min": 0.0,
           "start": true,
           "target_eta_s": 10.0,
-          "track_collection": false,
+          "track_collection": true,
           "collection_capacity_ml": 5.0,
           "collection_warn_ml": 4.5
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 1",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -852,7 +862,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 2",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -875,7 +885,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 3",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -898,7 +908,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 4",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -921,7 +931,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 5",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -944,7 +954,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 6",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -967,7 +977,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 7",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -990,7 +1000,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 8",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1013,7 +1023,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 9",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1036,7 +1046,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 10",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1063,36 +1073,38 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_5x5uL",
-          "resume_key": "25eb57a4647039ca"
+          "resume_key": "bf73e03360f7be6d"
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "PUMP_HEXW2",
       "status": "pending",
-      "details": "Pump: HEXW2 withdraw 225 @ 1350 (uLmin) | eta 10.0s",
+      "details": "Pump: HEXW2 withdraw 250 @ 1500 (uLmin) | eta 10.0s | collect 0.250 mL | warn 4.5/5 mL",
       "pump_action": {
         "name": "HEXW2",
         "params": {
           "units": "uLmin",
           "mode": "withdraw",
           "diameter_mm": 12.1,
-          "volume": 225.0,
-          "rate": 1350.0,
+          "volume": 250.0,
+          "rate": 1500.0,
           "delay_min": 0.0,
           "start": true,
           "target_eta_s": 10.0,
-          "track_collection": false,
+          "track_collection": true,
           "collection_capacity_ml": 5.0,
           "collection_warn_ml": 4.5
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     },
     {
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 1",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1115,7 +1127,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 2",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1138,7 +1150,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 3",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1161,7 +1173,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 4",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1184,7 +1196,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 5",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1207,7 +1219,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 6",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1230,7 +1242,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 7",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1253,7 +1265,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 8",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1276,7 +1288,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 9",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1299,7 +1311,7 @@
       "type": "SWV",
       "status": "pending",
       "details": "swv_babbbe.ms | MUX ch 10",
-      "block_name": "Sweep SWV (10 ch x 1)",
+      "block_name": "titration_5x5ul",
       "method_ref": {
         "hash_key": "swv_babbbe",
         "technique": "SWV",
@@ -1326,9 +1338,10 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_5x5uL",
-          "resume_key": "25eb57a4647039ca"
+          "resume_key": "bf73e03360f7be6d"
         }
-      }
+      },
+      "block_name": "titration_5x5ul"
     }
   ]
 }
