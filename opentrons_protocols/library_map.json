@@ -412,5 +412,78 @@
     "note": "Titration_5x5uL",
     "added_at": "2026-03-31T12:24:08",
     "filepath": "opentrons_protocols\\library\\Titration_5x5uL.py"
+  },
+  "generated_ui_protocol_9cac37": {
+    "kind": "generated_ui_protocol",
+    "params": {
+      "labware": [
+        {
+          "alias": "tips_20ul",
+          "load_name": "opentrons_96_filtertiprack_20ul",
+          "slot": "7"
+        },
+        {
+          "alias": "tips_200ul",
+          "load_name": "opentrons_96_filtertiprack_200ul",
+          "slot": "8"
+        },
+        {
+          "alias": "stock",
+          "load_name": "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap",
+          "slot": "2"
+        },
+        {
+          "alias": "dilute",
+          "load_name": "opentrons_6_tuberack_falcon_50ml_conical",
+          "slot": "3"
+        }
+      ],
+      "metadata": {
+        "api_level": "2.19",
+        "author": "Opentrons Flowcell Console",
+        "description": "dual pipetting",
+        "protocol_name": "dual_switching_dry_run",
+        "robot_type": "OT-2"
+      },
+      "pipette": {
+        "model": "p20_single_gen2",
+        "mount": "left",
+        "starting_tip": "F4",
+        "tiprack_alias": "tips_20ul"
+      },
+      "secondary_pipette": {
+        "model": "p300_single_gen2",
+        "mount": "right",
+        "starting_tip": "E1",
+        "tiprack_alias": "tips_200ul"
+      },
+      "steps": [
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 5.0
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 25.0
+        }
+      ]
+    },
+    "note": "dual_switching_dry_run",
+    "added_at": "2026-03-31T17:49:20",
+    "filepath": "opentrons_protocols\\library\\dual_switching_dry_run.py"
   }
 }

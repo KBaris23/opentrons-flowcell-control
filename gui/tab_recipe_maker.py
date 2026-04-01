@@ -64,6 +64,8 @@ class RecipeMakerTab:
         self._saved_blocks_dir.mkdir(parents=True, exist_ok=True)
         self._build()
 
+    _COMPRESS_SEND_DEST_DIR = Path(r"Z:\opentrons(setup_4)")
+
     # ── Build ──────────────────────────────────────────────────────────────
 
     def _build(self):
@@ -1633,6 +1635,28 @@ class RecipeMakerTab:
     def _build_blocks_library(self, parent):
         top = ttk.Frame(parent)
         top.pack(fill="x", padx=6, pady=6)
+        misc = ttk.LabelFrame(parent, text="Miscellaneous")
+        misc.pack(fill="x", padx=6, pady=(0, 6))
+        self._misc_folder_mode_var = tk.StringVar(value="current_experiment")
+        self._misc_folder_path_var = tk.StringVar(value="")
+        ttk.Radiobutton(
+            misc,
+            text="Current experiment folder",
+            variable=self._misc_folder_mode_var,
+            value="current_experiment",
+        ).grid(row=0, column=0, columnspan=2, padx=6, pady=4, sticky="w")
+        ttk.Radiobutton(
+            misc,
+            text="Specific measurement folder",
+            variable=self._misc_folder_mode_var,
+            value="specific_folder",
+        ).grid(row=1, column=0, padx=6, pady=4, sticky="w")
+        ttk.Entry(misc, textvariable=self._misc_folder_path_var, width=60).grid(row=1, column=1, padx=6, pady=4, sticky="ew")
+        ttk.Button(misc, text="Browse", command=self._browse_misc_folder).grid(row=1, column=2, padx=6, pady=4, sticky="w")
+        ttk.Button(misc, text="Add Compress + Send", command=self._add_compress_send_block).grid(
+            row=0, column=3, rowspan=2, padx=6, pady=4, sticky="e"
+        )
+        misc.columnconfigure(1, weight=1)
         ttk.Button(top, text="Refresh Blocks",
                    command=self._load_blocks).pack(side="left", padx=4)
         ttk.Button(top, text="Add Block",
@@ -1669,6 +1693,41 @@ class RecipeMakerTab:
             foreground="#666",
         )
         hint.pack(side="bottom", anchor="w", padx=8, pady=(0, 6))
+
+    def _browse_misc_folder(self):
+        initial_dir = str((self._repo_root / "measurement_data").resolve())
+        selected = filedialog.askdirectory(title="Select Measurement Folder", initialdir=initial_dir)
+        if selected:
+            self._misc_folder_mode_var.set("specific_folder")
+            self._misc_folder_path_var.set(selected)
+
+    def _add_compress_send_block(self):
+        mode = (self._misc_folder_mode_var.get() or "current_experiment").strip()
+        folder_path = (self._misc_folder_path_var.get() or "").strip()
+        if mode == "specific_folder" and not folder_path:
+            messagebox.showwarning("Missing Folder", "Choose a measurement folder first.")
+            return
+        details = (
+            f"Compress + send folder: {folder_path}"
+            if mode == "specific_folder"
+            else "Compress + send current experiment folder"
+        )
+        item = {
+            "type": "MISC_COMPRESS_SEND",
+            "status": "pending",
+            "details": details,
+            "misc_action": {
+                "name": "COMPRESS_SEND",
+                "params": {
+                    "folder_mode": mode,
+                    "folder_path": folder_path,
+                    "dest_dir": str(self._COMPRESS_SEND_DEST_DIR),
+                    "batch_path": r"C:\Users\chienlab\Desktop\Compress_n_SendToDrive.bat",
+                },
+            },
+        }
+        self._recipe.append(item)
+        self._refresh()
 
     def _load_blocks(self):
         self._blocks.clear()

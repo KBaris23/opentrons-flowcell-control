@@ -321,6 +321,11 @@ class OpentronsTab:
         self._builder_mount = tk.StringVar(value="left")
         self._builder_tiprack_alias = tk.StringVar(value="tips")
         self._builder_starting_tip = tk.StringVar(value="A1")
+        self._builder_use_dual_pipettes = tk.BooleanVar(value=False)
+        self._builder_secondary_pipette_model = tk.StringVar(value="p20_single_gen2")
+        self._builder_secondary_mount = tk.StringVar(value="right")
+        self._builder_secondary_tiprack_alias = tk.StringVar(value="tips_right")
+        self._builder_secondary_starting_tip = tk.StringVar(value="A1")
         self._builder_auto_tip_tracking = tk.BooleanVar(value=True)
         self._builder_tip_budget_var = tk.StringVar(
             value="Tip budget: 0 pickup(s) requested; 96 tip(s) available from A1 to H12; 96 tip(s) left."
@@ -405,12 +410,42 @@ class OpentronsTab:
         ).grid(row=3, column=3, padx=4, pady=4, sticky="w")
         ttk.Checkbutton(
             meta,
+            text="Use both pipettes in protocol",
+            variable=self._builder_use_dual_pipettes,
+            command=self.preview_builder_protocol,
+        ).grid(row=4, column=0, columnspan=2, padx=4, pady=(0, 4), sticky="w")
+        ttk.Label(meta, text="2nd pipette:").grid(row=4, column=2, padx=4, pady=(0, 4), sticky="e")
+        ttk.Combobox(
+            meta,
+            textvariable=self._builder_secondary_pipette_model,
+            values=["p20_single_gen2", "p300_single_gen2", "p1000_single_gen2"],
+            state="readonly",
+        ).grid(row=4, column=3, padx=4, pady=(0, 4), sticky="ew")
+        ttk.Label(meta, text="2nd side:").grid(row=4, column=4, padx=4, pady=(0, 4), sticky="e")
+        ttk.Combobox(
+            meta,
+            textvariable=self._builder_secondary_mount,
+            values=["left", "right"],
+            state="readonly",
+            width=10,
+        ).grid(row=4, column=5, padx=4, pady=(0, 4), sticky="ew")
+        ttk.Label(meta, text="2nd tiprack alias:").grid(row=5, column=0, padx=4, pady=(0, 4), sticky="e")
+        ttk.Entry(meta, textvariable=self._builder_secondary_tiprack_alias, width=12).grid(row=5, column=1, padx=4, pady=(0, 4), sticky="w")
+        ttk.Label(meta, text="2nd starting tip:").grid(row=5, column=2, padx=4, pady=(0, 4), sticky="e")
+        ttk.Combobox(
+            meta,
+            textvariable=self._builder_secondary_starting_tip,
+            values=self._TIP_WELL_OPTIONS,
+            width=10,
+        ).grid(row=5, column=3, padx=4, pady=(0, 4), sticky="w")
+        ttk.Checkbutton(
+            meta,
             text="Auto-advance tip",
             variable=self._builder_auto_tip_tracking,
             command=self._apply_tracked_starting_tip,
-        ).grid(row=4, column=2, padx=4, pady=(0, 4), sticky="w")
+        ).grid(row=6, column=2, padx=4, pady=(0, 4), sticky="w")
         ttk.Button(meta, text="Reset Tip Tracker", command=self._reset_builder_tip_tracker).grid(
-            row=4, column=3, padx=4, pady=(0, 4), sticky="w"
+            row=6, column=3, padx=4, pady=(0, 4), sticky="w"
         )
         ttk.Label(
             meta,
@@ -418,7 +453,7 @@ class OpentronsTab:
             foreground="#666",
             wraplength=900,
             justify="left",
-        ).grid(row=5, column=0, columnspan=6, padx=4, pady=(0, 4), sticky="w")
+        ).grid(row=7, column=0, columnspan=6, padx=4, pady=(0, 4), sticky="w")
 
         self._build_labware_panel(deck_wrap)
 
@@ -528,7 +563,7 @@ class OpentronsTab:
 
         controls = ttk.LabelFrame(controls_wrap, text="Step Builder")
         controls.grid(row=0, column=0, sticky="ew")
-        for col in range(8):
+        for col in range(9):
             controls.columnconfigure(col, weight=1)
 
         self._step_kind_var = tk.StringVar(value="transfer")
@@ -539,6 +574,7 @@ class OpentronsTab:
         self._step_dest_well_var = tk.StringVar(value="A2")
         self._step_location_var = tk.StringVar(value="top")
         self._step_new_tip_var = tk.StringVar(value="once")
+        self._step_pipette_key_var = tk.StringVar(value="primary")
         self._step_seconds_var = tk.StringVar(value="1")
         self._step_comment_var = tk.StringVar(value="")
 
@@ -551,6 +587,7 @@ class OpentronsTab:
             ("Dest Well", self._step_dest_well_var, None),
             ("Location", self._step_location_var, ["top", "center", "bottom"]),
             ("New Tip", self._step_new_tip_var, ["once", "always", "never"]),
+            ("Pipette", self._step_pipette_key_var, ["primary", "secondary"]),
         ]
         for idx, (label, var, values) in enumerate(fields):
             ttk.Label(controls, text=label).grid(row=0, column=idx, padx=2, pady=2, sticky="w")
@@ -646,6 +683,11 @@ class OpentronsTab:
         self._step_dest_alias_var.set("")
         self._step_dest_well_var.set("")
         self._step_comment_var.set("")
+        self._builder_use_dual_pipettes.set(False)
+        self._builder_secondary_pipette_model.set("p20_single_gen2")
+        self._builder_secondary_mount.set("right")
+        self._builder_secondary_tiprack_alias.set("tips_right")
+        self._builder_secondary_starting_tip.set("A1")
         self._set_tip_budget_message("Tip budget: add a tiprack and preview the builder to estimate remaining tips.")
 
     def _labware_load_name_options(self) -> list[str]:
@@ -828,6 +870,8 @@ class OpentronsTab:
             normalized = normalize_protocol_spec(spec)
         except Exception:
             return None, None
+        if normalized.get("secondary_pipette"):
+            return None, None
         pipette = normalized["pipette"]
         tiprack_entry = next(
             (entry for entry in normalized["labware"] if entry["alias"] == pipette["tiprack_alias"]),
@@ -930,6 +974,22 @@ class OpentronsTab:
             return []
 
         warnings = list(usage.get("warnings") or [])
+        per_pipette = usage.get("per_pipette") or {}
+        if per_pipette and len(per_pipette) > 1:
+            segments = []
+            for key, bucket in per_pipette.items():
+                if bucket.get("available_tips") is None:
+                    segments.append(f"{key}: manual check")
+                    continue
+                text = (
+                    f"{key}: {bucket.get('tips_used', 0)} pickup(s), "
+                    f"{bucket.get('available_tips', 0)} available from {bucket.get('starting_tip')}"
+                )
+                if bucket.get("next_tip"):
+                    text += f", next {bucket.get('next_tip')}"
+                segments.append(text)
+            self._set_tip_budget_message("Tip budget: " + " | ".join(segments))
+            return warnings
         available_tips = usage.get("available_tips")
         if available_tips is None:
             self._set_tip_budget_message(
@@ -962,6 +1022,10 @@ class OpentronsTab:
         tiprack_alias = (self._builder_tiprack_alias.get() or "").strip()
         if tiprack_alias:
             aliases.add(tiprack_alias)
+        if bool(self._builder_use_dual_pipettes.get()):
+            secondary_tiprack_alias = (self._builder_secondary_tiprack_alias.get() or "").strip()
+            if secondary_tiprack_alias:
+                aliases.add(secondary_tiprack_alias)
         return aliases
 
     def _validate_alias(self, alias: str, field_name: str) -> None:
@@ -979,7 +1043,15 @@ class OpentronsTab:
 
     def _validate_step(self, step: dict) -> None:
         kind = step.get("kind", "")
-        pipette_model = (self._builder_pipette_model.get() or "").strip()
+        pipette_key = str(step.get("pipette_key", "primary")).strip().lower() or "primary"
+        if pipette_key == "secondary" and not bool(self._builder_use_dual_pipettes.get()):
+            raise ValueError("Secondary pipette selected for this step, but dual-pipette mode is not enabled.")
+        pipette_model = (
+            self._builder_secondary_pipette_model.get()
+            if pipette_key == "secondary"
+            else self._builder_pipette_model.get()
+        ) or ""
+        pipette_model = pipette_model.strip()
         pipette_max_ul = self._PIPETTE_MAX_VOLUME_UL.get(pipette_model, 0.0)
 
         if kind in {"transfer", "aspirate", "dispense"}:
@@ -1000,7 +1072,12 @@ class OpentronsTab:
             self._validate_well(str(step.get("dest_well", "")).strip().upper(), "Dest well")
 
         if kind in {"pick_up_tip", "drop_tip"}:
-            alias = str(step.get("source_alias", "")).strip() or (self._builder_tiprack_alias.get() or "").strip()
+            default_tiprack_alias = (
+                (self._builder_secondary_tiprack_alias.get() or "").strip()
+                if pipette_key == "secondary"
+                else (self._builder_tiprack_alias.get() or "").strip()
+            )
+            alias = str(step.get("source_alias", "")).strip() or default_tiprack_alias
             step["source_alias"] = alias
             self._validate_alias(alias, "Tiprack alias")
             well = str(step.get("source_well", "")).strip().upper()
@@ -1177,6 +1254,11 @@ class OpentronsTab:
         self._builder_mount.set("left")
         self._builder_tiprack_alias.set("")
         self._builder_starting_tip.set("A1")
+        self._builder_use_dual_pipettes.set(False)
+        self._builder_secondary_pipette_model.set("p20_single_gen2")
+        self._builder_secondary_mount.set("right")
+        self._builder_secondary_tiprack_alias.set("tips_right")
+        self._builder_secondary_starting_tip.set("A1")
         self._labware_alias_var.set("")
         self._labware_name_var.set("")
         self._labware_slot_var.set("")
@@ -1188,6 +1270,7 @@ class OpentronsTab:
         self._step_dest_well_var.set("")
         self._step_location_var.set("top")
         self._step_new_tip_var.set("once")
+        self._step_pipette_key_var.set("primary")
         self._step_seconds_var.set("1")
         self._step_comment_var.set("")
         self._labware_rows = []
@@ -1256,11 +1339,13 @@ class OpentronsTab:
         spec = {
             "metadata": dict(raw_spec.get("metadata") or {}),
             "pipette": dict(raw_spec.get("pipette") or {}),
+            "secondary_pipette": dict(raw_spec.get("secondary_pipette") or {}),
             "labware": [dict(entry or {}) for entry in (raw_spec.get("labware") or [])],
             "steps": [dict(step or {}) for step in (raw_spec.get("steps") or [])],
         }
         meta = spec["metadata"]
         pipette = spec["pipette"]
+        secondary = spec["secondary_pipette"]
         self._builder_protocol_name.set(str(meta.get("protocol_name", "Generated Protocol")))
         self._builder_author.set(str(meta.get("author", "Opentrons Flowcell Console")))
         self._builder_description.set(str(meta.get("description", "")))
@@ -1270,6 +1355,11 @@ class OpentronsTab:
         self._builder_mount.set(str(pipette.get("mount", "left")))
         self._builder_tiprack_alias.set(str(pipette.get("tiprack_alias", "")))
         self._builder_starting_tip.set(str(pipette.get("starting_tip", "A1")))
+        self._builder_use_dual_pipettes.set(bool(secondary))
+        self._builder_secondary_pipette_model.set(str(secondary.get("model", "p20_single_gen2")))
+        self._builder_secondary_mount.set(str(secondary.get("mount", "right")))
+        self._builder_secondary_tiprack_alias.set(str(secondary.get("tiprack_alias", "tips_right")))
+        self._builder_secondary_starting_tip.set(str(secondary.get("starting_tip", "A1")))
         self._labware_rows = spec["labware"]
         self._step_rows = spec["steps"]
         self._selected_labware_index = None
@@ -1636,6 +1726,7 @@ class OpentronsTab:
         self._step_dest_well_var.set(step.get("dest_well", ""))
         self._step_location_var.set(step.get("location", "top"))
         self._step_new_tip_var.set(step.get("new_tip", "once"))
+        self._step_pipette_key_var.set(step.get("pipette_key", "primary"))
         self._step_seconds_var.set(str(step.get("seconds", "")))
         self._step_comment_var.set(step.get("comment", step.get("message", "")))
 
@@ -1652,6 +1743,8 @@ class OpentronsTab:
             step["dest_well"] = (self._step_dest_well_var.get() or "").strip().upper()
         if kind == "transfer":
             step["new_tip"] = (self._step_new_tip_var.get() or "once").strip().lower()
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out", "pick_up_tip", "drop_tip"}:
+            step["pipette_key"] = (self._step_pipette_key_var.get() or "primary").strip().lower()
         if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
             step["location"] = (self._step_location_var.get() or "top").strip().lower()
         if kind == "delay":
@@ -1783,6 +1876,16 @@ class OpentronsTab:
                 "tiprack_alias": self._builder_tiprack_alias.get(),
                 "starting_tip": self._builder_starting_tip.get(),
             },
+            "secondary_pipette": (
+                {
+                    "model": self._builder_secondary_pipette_model.get(),
+                    "mount": self._builder_secondary_mount.get(),
+                    "tiprack_alias": self._builder_secondary_tiprack_alias.get(),
+                    "starting_tip": self._builder_secondary_starting_tip.get(),
+                }
+                if bool(self._builder_use_dual_pipettes.get())
+                else None
+            ),
             "labware": list(self._labware_rows),
             "steps": list(self._step_rows),
         }
@@ -1910,33 +2013,33 @@ class OpentronsTab:
                 f"{step.get('volume_ul', 0):g} uL "
                 f"{step.get('source_alias')}:{step.get('source_well')} -> "
                 f"{step.get('dest_alias')}:{step.get('dest_well')} "
-                f"(new_tip={step.get('new_tip', 'once')}, location={step.get('location', 'top')})"
+                f"(pipette={step.get('pipette_key', 'primary')}, new_tip={step.get('new_tip', 'once')}, location={step.get('location', 'top')})"
             )
         if kind == "move_to":
-            return f"{step.get('source_alias')}:{step.get('source_well')} {step.get('location', 'top')}"
+            return f"{step.get('source_alias')}:{step.get('source_well')} {step.get('location', 'top')} ({step.get('pipette_key', 'primary')})"
         if kind == "aspirate":
             return (
                 f"{step.get('volume_ul', 0):g} uL from "
                 f"{step.get('source_alias')}:{step.get('source_well')} "
-                f"({step.get('location', 'top')})"
+                f"({step.get('pipette_key', 'primary')}, {step.get('location', 'top')})"
             )
         if kind == "dispense":
             return (
                 f"{step.get('volume_ul', 0):g} uL to "
                 f"{step.get('dest_alias')}:{step.get('dest_well')} "
-                f"({step.get('location', 'top')})"
+                f"({step.get('pipette_key', 'primary')}, {step.get('location', 'top')})"
             )
         if kind == "blow_out":
-            return f"at {step.get('source_alias')}:{step.get('source_well')} ({step.get('location', 'top')})"
+            return f"at {step.get('source_alias')}:{step.get('source_well')} ({step.get('pipette_key', 'primary')}, {step.get('location', 'top')})"
+        if kind in {"pick_up_tip", "drop_tip"}:
+            suffix = f" {step.get('source_alias')}:{step.get('source_well')}" if step.get("source_well") else ""
+            return f"{kind} {step.get('pipette_key', 'primary')}{suffix}".strip()
         if kind == "delay":
             return f"{step.get('seconds', 0):g} second(s)"
         if kind == "comment":
             return str(step.get("comment", "")).strip() or "(empty comment)"
         if kind == "pause":
             return f"pause: {str(step.get('message', '')).strip() or '(empty pause message)'}"
-        if kind in {"pick_up_tip", "drop_tip"}:
-            suffix = f" {step.get('source_alias')}:{step.get('source_well')}" if step.get("source_well") else ""
-            return suffix.strip() or "default tip position"
         if kind == "home":
             return "home robot"
         return str(step)

@@ -13,6 +13,7 @@ Responsible for:
 import copy
 import json
 import re
+import shutil
 import threading
 import time
 from datetime import datetime
@@ -916,6 +917,10 @@ class QueueTab:
             action = item.get("opentrons_action") or {}
             data["opentrons_action"] = {"name": action.get("name"),
                                         "params": dict(action.get("params") or {})}
+        elif t and t.startswith("MISC_"):
+            action = item.get("misc_action") or {}
+            data["misc_action"] = {"name": action.get("name"),
+                                   "params": dict(action.get("params") or {})}
         else:
             if "script_path" in item:
                 data["script_path"] = item["script_path"]
@@ -998,6 +1003,26 @@ class QueueTab:
                 item["details"] = details or f"Opentrons {mode.upper()} {protocol_label}"
             else:
                 return None
+        elif t.startswith("MISC_"):
+            action = raw.get("misc_action") or {}
+            params = dict(action.get("params") or {})
+            action_name = str(action.get("name") or "").strip().upper()
+            if action_name != "COMPRESS_SEND":
+                return None
+            mode = str(params.get("folder_mode") or "current_experiment").strip().lower()
+            if mode not in {"current_experiment", "specific_folder"}:
+                return None
+            if mode == "specific_folder":
+                folder_path = str(params.get("folder_path") or "").strip()
+                if not folder_path:
+                    return None
+                params["folder_path"] = folder_path
+            item["misc_action"] = {"name": action_name, "params": params}
+            item["details"] = details or (
+                f"Compress + send folder: {params.get('folder_path')}"
+                if mode == "specific_folder"
+                else "Compress + send current experiment folder"
+            )
         else:
             sp = raw.get("script_path")
             method_ref = raw.get("method_ref") or {}
@@ -1467,6 +1492,11 @@ class QueueTab:
                             "completed" if ok else ("stopped" if not self._session.is_running else "failed")
                         )
                         success = ok
+
+                elif t.startswith("MISC_"):
+                    ok = self._exec_misc(item)
+                    self._session.measurement_queue[i]["status"] = "completed" if ok else "failed"
+                    success = ok
 
                 else:
                     self._ensure_mux_script_for_item(item)
@@ -2064,6 +2094,76 @@ class QueueTab:
 
         runner = OpentronsProtocolRunner(log_callback=self.log)
         return "completed" if runner.home_robot(robot_host=robot_host, robot_port=robot_port) else "failed"
+
+    def _exec_misc(self, item: dict) -> bool:
+        action_info = item.get("misc_action") or {}
+        action_name = str(action_info.get("name") or "").strip().upper()
+        params = dict(action_info.get("params") or {})
+        session_mgr = getattr(self._session, "session_manager", None)
+        if action_name != "COMPRESS_SEND":
+            self.log(f"Unsupported misc action: {action_name}")
+            return False
+
+        mode = str(params.get("folder_mode") or "current_experiment").strip().lower()
+        if mode == "current_experiment":
+            session_mgr = getattr(self._session, "session_manager", None)
+            experiment_path = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
+            session_path = getattr(session_mgr, "current_session_path", None) if session_mgr else None
+            source = experiment_path or session_path
+            if source is None:
+                self.log("Compress+Send failed: no current experiment or session folder is active.")
+                if session_mgr is not None:
+                    session_mgr.notify_slack("Compress+Send failed: no current experiment or session folder is active.")
+                return False
+            source_path = Path(source)
+            if experiment_path is not None:
+                self.log(f"Compress+Send source -> active experiment folder: {source_path}")
+            else:
+                self.log(f"Compress+Send source -> no active experiment; using current session folder: {source_path}")
+        else:
+            raw_folder = str(params.get("folder_path") or "").strip()
+            if not raw_folder:
+                self.log("Compress+Send failed: folder path is missing.")
+                if session_mgr is not None:
+                    session_mgr.notify_slack("Compress+Send failed: folder path is missing.")
+                return False
+            source_path = Path(raw_folder).expanduser()
+            if not source_path.is_absolute():
+                source_path = (Path.cwd() / source_path).resolve()
+
+        if not source_path.exists() or not source_path.is_dir():
+            self.log(f"Compress+Send failed: folder not found: {source_path}")
+            if session_mgr is not None:
+                session_mgr.notify_slack(f"Compress+Send failed: folder not found: {source_path}")
+            return False
+
+        dest_dir = Path(str(params.get("dest_dir") or r"Z:\opentrons(setup_4)"))
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            self.log(f"Compress+Send failed: could not create destination {dest_dir}: {exc}")
+            if session_mgr is not None:
+                session_mgr.notify_slack(f"Compress+Send failed: could not create destination {dest_dir}: {exc}")
+            return False
+
+        archive_path = dest_dir / f"{source_path.name}.zip"
+        try:
+            self.log(f"Compress+Send -> zipping {source_path} to {archive_path}")
+            shutil.make_archive(
+                str(archive_path.with_suffix("")),
+                "zip",
+                root_dir=str(source_path),
+                base_dir=".",
+            )
+            self.log(f"Compress+Send complete: {archive_path}")
+            if session_mgr is not None:
+                session_mgr.notify_slack(f"Compress+Send complete: {source_path.name} -> {archive_path}")
+            return True
+        except Exception as exc:
+            self.log(f"Compress+Send failed: {exc}")
+            if session_mgr is not None:
+                session_mgr.notify_slack(f"Compress+Send failed for {source_path}: {exc}")
+            return False
 
     def _log_pump_status(self, label: str, resp: str) -> None:
         text = (resp or "").strip()
