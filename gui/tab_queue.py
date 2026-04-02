@@ -2177,8 +2177,30 @@ class QueueTab:
             self.log(f"Pump ops/status code: {code} ({state})")
 
     @staticmethod
+    def _boolish(value, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off", ""}:
+            return False
+        return bool(value)
+
+    @classmethod
+    def _should_track_collection(cls, params: dict | None) -> bool:
+        payload = params or {}
+        if "track_collection" in payload:
+            return cls._boolish(payload.get("track_collection"), default=False)
+        mode = str(payload.get("mode") or "").strip().lower()
+        volume_ul = volume_to_ul(payload.get("volume"), str(payload.get("units") or ""))
+        return mode == "withdraw" and (volume_ul or 0.0) > 0.0
+
+    @staticmethod
     def _tracked_collection_info(params: dict) -> dict | None:
-        if not bool((params or {}).get("track_collection")):
+        if not QueueTab._should_track_collection(params):
             return None
         volume_ul = volume_to_ul((params or {}).get("volume"), str((params or {}).get("units") or ""))
         if volume_ul is None:

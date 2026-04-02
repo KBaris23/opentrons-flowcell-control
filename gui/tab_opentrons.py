@@ -55,6 +55,7 @@ class OpentronsTab:
         "move_to",
         "aspirate",
         "dispense",
+        "mix",
         "blow_out",
         "delay",
         "pick_up_tip",
@@ -575,6 +576,7 @@ class OpentronsTab:
         self._step_location_var = tk.StringVar(value="top")
         self._step_new_tip_var = tk.StringVar(value="once")
         self._step_pipette_key_var = tk.StringVar(value="primary")
+        self._step_repetitions_var = tk.StringVar(value="3")
         self._step_seconds_var = tk.StringVar(value="1")
         self._step_comment_var = tk.StringVar(value="")
 
@@ -600,11 +602,13 @@ class OpentronsTab:
 
         ttk.Label(controls, text="Delay (s)").grid(row=2, column=0, padx=2, pady=2, sticky="w")
         ttk.Entry(controls, textvariable=self._step_seconds_var).grid(row=3, column=0, padx=2, pady=2, sticky="ew")
-        ttk.Label(controls, text="Text / Message").grid(row=2, column=1, padx=2, pady=2, sticky="w")
+        ttk.Label(controls, text="Repeats").grid(row=2, column=1, padx=2, pady=2, sticky="w")
+        ttk.Entry(controls, textvariable=self._step_repetitions_var).grid(row=3, column=1, padx=2, pady=2, sticky="ew")
+        ttk.Label(controls, text="Text / Message").grid(row=2, column=2, padx=2, pady=2, sticky="w")
         ttk.Entry(controls, textvariable=self._step_comment_var).grid(
             row=3,
-            column=1,
-            columnspan=7,
+            column=2,
+            columnspan=6,
             padx=2,
             pady=2,
             sticky="ew",
@@ -682,6 +686,7 @@ class OpentronsTab:
         self._step_source_well_var.set("")
         self._step_dest_alias_var.set("")
         self._step_dest_well_var.set("")
+        self._step_repetitions_var.set("3")
         self._step_comment_var.set("")
         self._builder_use_dual_pipettes.set(False)
         self._builder_secondary_pipette_model.set("p20_single_gen2")
@@ -1054,16 +1059,20 @@ class OpentronsTab:
         pipette_model = pipette_model.strip()
         pipette_max_ul = self._PIPETTE_MAX_VOLUME_UL.get(pipette_model, 0.0)
 
-        if kind in {"transfer", "aspirate", "dispense"}:
+        if kind in {"transfer", "aspirate", "dispense", "mix"}:
             volume_ul = float(step.get("volume_ul", 0))
             if volume_ul <= 0:
                 raise ValueError("Volume must be greater than 0 uL.")
-            if kind in {"aspirate", "dispense"} and pipette_max_ul and volume_ul > pipette_max_ul:
+            if kind in {"aspirate", "dispense", "mix"} and pipette_max_ul and volume_ul > pipette_max_ul:
                 raise ValueError(f"{kind.title()} volume {volume_ul:g} uL exceeds the selected pipette capacity ({pipette_max_ul:g} uL).")
             if kind == "transfer" and volume_ul > self._MAX_TRANSFER_VOLUME_UL:
                 raise ValueError(f"Transfer volume {volume_ul:g} uL is too large for a sane builder step. Split it into smaller steps.")
+        if kind == "mix":
+            repetitions = int(step.get("repetitions", 0))
+            if repetitions <= 0:
+                raise ValueError("Mix repetitions must be a whole number greater than 0.")
 
-        if kind in {"transfer", "aspirate", "move_to", "blow_out"}:
+        if kind in {"transfer", "aspirate", "move_to", "blow_out", "mix"}:
             self._validate_alias(str(step.get("source_alias", "")).strip(), "Source alias")
             self._validate_well(str(step.get("source_well", "")).strip().upper(), "Source well")
 
@@ -1085,7 +1094,7 @@ class OpentronsTab:
                 self._validate_well(well, "Tip well")
                 step["source_well"] = well
 
-        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out", "mix"}:
             location = str(step.get("location", "")).strip().lower()
             if location not in {"top", "center", "bottom"}:
                 raise ValueError("Location must be top, center, or bottom.")
@@ -1271,6 +1280,7 @@ class OpentronsTab:
         self._step_location_var.set("top")
         self._step_new_tip_var.set("once")
         self._step_pipette_key_var.set("primary")
+        self._step_repetitions_var.set("3")
         self._step_seconds_var.set("1")
         self._step_comment_var.set("")
         self._labware_rows = []
@@ -1371,6 +1381,7 @@ class OpentronsTab:
         self._step_source_well_var.set("")
         self._step_dest_alias_var.set("")
         self._step_dest_well_var.set("")
+        self._step_repetitions_var.set("3")
         self._step_comment_var.set("")
         self._refresh_labware_name_options()
         self._refresh_labware_tree()
@@ -1727,15 +1738,18 @@ class OpentronsTab:
         self._step_location_var.set(step.get("location", "top"))
         self._step_new_tip_var.set(step.get("new_tip", "once"))
         self._step_pipette_key_var.set(step.get("pipette_key", "primary"))
+        self._step_repetitions_var.set(str(step.get("repetitions", "")))
         self._step_seconds_var.set(str(step.get("seconds", "")))
         self._step_comment_var.set(step.get("comment", step.get("message", "")))
 
     def _current_step_from_form(self) -> dict:
         kind = (self._step_kind_var.get() or "").strip().lower()
         step = {"kind": kind}
-        if kind in {"transfer", "aspirate", "dispense"}:
+        if kind in {"transfer", "aspirate", "dispense", "mix"}:
             step["volume_ul"] = float(self._step_volume_var.get())
-        if kind in {"transfer", "aspirate", "move_to", "blow_out", "pick_up_tip", "drop_tip"}:
+        if kind == "mix":
+            step["repetitions"] = int(self._step_repetitions_var.get())
+        if kind in {"transfer", "aspirate", "move_to", "blow_out", "pick_up_tip", "drop_tip", "mix"}:
             step["source_alias"] = (self._step_source_alias_var.get() or "").strip()
             step["source_well"] = (self._step_source_well_var.get() or "").strip().upper()
         if kind in {"transfer", "dispense"}:
@@ -1743,9 +1757,9 @@ class OpentronsTab:
             step["dest_well"] = (self._step_dest_well_var.get() or "").strip().upper()
         if kind == "transfer":
             step["new_tip"] = (self._step_new_tip_var.get() or "once").strip().lower()
-        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out", "pick_up_tip", "drop_tip"}:
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out", "pick_up_tip", "drop_tip", "mix"}:
             step["pipette_key"] = (self._step_pipette_key_var.get() or "primary").strip().lower()
-        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out", "mix"}:
             step["location"] = (self._step_location_var.get() or "top").strip().lower()
         if kind == "delay":
             step["seconds"] = float(self._step_seconds_var.get())
@@ -2027,6 +2041,12 @@ class OpentronsTab:
             return (
                 f"{step.get('volume_ul', 0):g} uL to "
                 f"{step.get('dest_alias')}:{step.get('dest_well')} "
+                f"({step.get('pipette_key', 'primary')}, {step.get('location', 'top')})"
+            )
+        if kind == "mix":
+            return (
+                f"mix {step.get('repetitions', 1)}x {step.get('volume_ul', 0):g} uL at "
+                f"{step.get('source_alias')}:{step.get('source_well')} "
                 f"({step.get('pipette_key', 'primary')}, {step.get('location', 'top')})"
             )
         if kind == "blow_out":

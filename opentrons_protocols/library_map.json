@@ -485,5 +485,227 @@
     "note": "dual_switching_dry_run",
     "added_at": "2026-03-31T17:49:20",
     "filepath": "opentrons_protocols\\library\\dual_switching_dry_run.py"
+  },
+  "generated_ui_protocol_f5bb05": {
+    "kind": "generated_ui_protocol",
+    "params": {
+      "labware": [
+        {
+          "alias": "tips_20ul",
+          "load_name": "opentrons_96_filtertiprack_20ul",
+          "slot": "7"
+        },
+        {
+          "alias": "tips_200ul",
+          "load_name": "opentrons_96_filtertiprack_200ul",
+          "slot": "8"
+        },
+        {
+          "alias": "stock",
+          "load_name": "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap",
+          "slot": "2"
+        },
+        {
+          "alias": "dilute",
+          "load_name": "opentrons_6_tuberack_falcon_50ml_conical",
+          "slot": "3"
+        }
+      ],
+      "metadata": {
+        "api_level": "2.19",
+        "author": "Opentrons Flowcell Console",
+        "description": "titration with 0, 0.975, 0.950, 1.8551, 33,604, 7.017, 13.667, 26.660, 52.219, 103.211 uL pipetting",
+        "protocol_name": "Titration_Kana_10_steps",
+        "robot_type": "OT-2"
+      },
+      "pipette": {
+        "model": "p20_single_gen2",
+        "mount": "left",
+        "starting_tip": "G4",
+        "tiprack_alias": "tips_20ul"
+      },
+      "secondary_pipette": {
+        "model": "p300_single_gen2",
+        "mount": "right",
+        "starting_tip": "F1",
+        "tiprack_alias": "tips_200ul"
+      },
+      "steps": [
+        {
+          "comment": "start titration step 1",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 0.975
+        },
+        {
+          "kind": "pause",
+          "message": "first step done"
+        },
+        {
+          "comment": "start titration step 2",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 0.95
+        },
+        {
+          "kind": "pause",
+          "message": "step 2 done"
+        },
+        {
+          "comment": "start titration step 3",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 1.851
+        },
+        {
+          "kind": "pause",
+          "message": "step 3 done"
+        },
+        {
+          "comment": "start titration step 4",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 3.604
+        },
+        {
+          "kind": "pause",
+          "message": "step 4 done"
+        },
+        {
+          "comment": "start titration step 5",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 7.017
+        },
+        {
+          "kind": "pause",
+          "message": "step 5 done"
+        },
+        {
+          "comment": "start titration step 6",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 13.667
+        },
+        {
+          "kind": "pause",
+          "message": "step 6 done"
+        },
+        {
+          "comment": "start titration step 7",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 26.66
+        },
+        {
+          "kind": "pause",
+          "message": "step 7 done"
+        },
+        {
+          "comment": "start titration step 8",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 52.219
+        },
+        {
+          "kind": "pause",
+          "message": "step 8 done"
+        },
+        {
+          "comment": "start titration step 9",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "A2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 103.211
+        },
+        {
+          "comment": "titration completed",
+          "kind": "comment"
+        }
+      ]
+    },
+    "note": "Titration_Kana_10_steps",
+    "added_at": "2026-03-31T18:31:22",
+    "filepath": "opentrons_protocols\\library\\Titration_Kana_10_steps.py"
   }
 }

@@ -12,7 +12,7 @@ _STANDARD_96_TIPRACK_ORDER = tuple(
     for row in "ABCDEFGH"
 )
 _BOTTOM_CLEARANCE_MM = 2.0
-_PIPETTE_STEP_KINDS = {"transfer", "aspirate", "dispense", "move_to", "blow_out", "pick_up_tip", "drop_tip"}
+_PIPETTE_STEP_KINDS = {"transfer", "aspirate", "dispense", "move_to", "blow_out", "pick_up_tip", "drop_tip", "mix"}
 
 
 def normalize_identifier(value: str, *, fallback: str) -> str:
@@ -95,8 +95,10 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
         if not kind:
             raise ValueError(f"Step {idx} is missing a kind.")
         cleaned = {"kind": kind}
-        if kind in {"transfer", "aspirate", "dispense"}:
+        if kind in {"transfer", "aspirate", "dispense", "mix"}:
             cleaned["volume_ul"] = float(step.get("volume_ul", 0))
+        if kind == "mix":
+            cleaned["repetitions"] = int(step.get("repetitions", 1))
         if kind in _PIPETTE_STEP_KINDS:
             pipette_key = str(step.get("pipette_key", "primary")).strip().lower() or "primary"
             if pipette_key not in {"primary", "secondary"}:
@@ -104,7 +106,7 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
             if pipette_key == "secondary" and secondary_pipette is None:
                 raise ValueError(f"Step {idx} requests the secondary pipette, but dual-pipette mode is not enabled.")
             cleaned["pipette_key"] = pipette_key
-        if kind in {"transfer", "aspirate", "move_to", "blow_out"}:
+        if kind in {"transfer", "aspirate", "move_to", "blow_out", "mix"}:
             cleaned["source_alias"] = normalize_identifier(step.get("source_alias", ""), fallback="labware")
             cleaned["source_well"] = str(step.get("source_well", "")).strip().upper()
         if kind in {"transfer", "dispense"}:
@@ -112,7 +114,7 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
             cleaned["dest_well"] = str(step.get("dest_well", "")).strip().upper()
         if kind == "transfer":
             cleaned["new_tip"] = str(step.get("new_tip", "once")).strip().lower() or "once"
-        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out"}:
+        if kind in {"transfer", "aspirate", "dispense", "move_to", "blow_out", "mix"}:
             cleaned["location"] = str(step.get("location", "top")).strip().lower() or "top"
         if kind == "delay":
             cleaned["seconds"] = float(step.get("seconds", 0))
@@ -364,6 +366,12 @@ def generate_protocol_source(raw_spec: dict[str, Any]) -> tuple[str, dict[str, A
             location = step.get("location", "top")
             lines.append(
                 f"    {pipette_var}.dispense({step['volume_ul']:g}, {location_expr(dst, step['dest_well'], location)})"
+            )
+        elif kind == "mix":
+            src = alias_map[step["source_alias"]]
+            location = step.get("location", "top")
+            lines.append(
+                f"    {pipette_var}.mix({step['repetitions']}, {step['volume_ul']:g}, {location_expr(src, step['source_well'], location)})"
             )
         elif kind == "move_to":
             src = alias_map[step["source_alias"]]
