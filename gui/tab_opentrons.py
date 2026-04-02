@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 import threading
-import hashlib
 from pathlib import Path
 import json
 from tkinter import filedialog, messagebox
@@ -27,6 +26,7 @@ from robot import (
     summarize_protocol_spec,
 )
 from robot.opentrons_builder import normalize_protocol_spec, spec_hash_params, tiprack_well_order
+from core.opentrons_identity import resolve_protocol_id, resume_key_for_protocol
 
 
 class OpentronsTab:
@@ -107,6 +107,9 @@ class OpentronsTab:
         self._step_clipboard: list[dict] = []
         self._selected_labware_index: int | None = None
         self._selected_step_index: int | None = None
+        self._builder_loaded_library_path: Path | None = None
+        self._builder_loaded_protocol_id: str | None = None
+        self._builder_loaded_library_key: str | None = None
         self._available_labware_load_names = self._discover_labware_load_names()
         self._all_labware_load_names = self._labware_load_name_options_static()
 
@@ -292,7 +295,7 @@ class OpentronsTab:
                 "Inspect: read the file and summarize it.  "
                 "Preview: show builder-generated Python code.  "
                 "Validate: check only, no simulation or robot run.  "
-                "Use Load Into Builder to edit a saved generated library protocol."
+                "Use Load Into Builder to edit a saved generated library protocol, then Update Existing to overwrite that same library file."
             ),
             wraplength=900,
             justify="left",
@@ -465,6 +468,7 @@ class OpentronsTab:
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Update Existing", command=self.update_builder_library_protocol).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Load Selected File", command=self.load_current_file_into_builder).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Clear Builder", command=self.clear_builder_form).pack(side="left", padx=3)
 
@@ -495,6 +499,7 @@ class OpentronsTab:
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Update Existing", command=self.update_builder_library_protocol).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Load Selected File", command=self.load_current_file_into_builder).pack(side="left", padx=3)
 
     def _build_labware_panel(self, parent) -> None:
@@ -662,6 +667,7 @@ class OpentronsTab:
         ttk.Button(action_btns, text="Add to Queue", command=self.add_builder_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Add Resume", command=self.add_builder_resume_to_queue).pack(side="left", padx=3)
         ttk.Button(action_btns, text="Save to Library", command=self.save_builder_to_library).pack(side="left", padx=3)
+        ttk.Button(action_btns, text="Update Existing", command=self.update_builder_library_protocol).pack(side="left", padx=3)
 
         edit_btns = ttk.Frame(parent)
         edit_btns.grid(row=2, column=0, sticky="w", pady=(6, 0))
@@ -1254,6 +1260,9 @@ class OpentronsTab:
         return path
 
     def clear_builder_form(self) -> None:
+        self._builder_loaded_library_path = None
+        self._builder_loaded_protocol_id = None
+        self._builder_loaded_library_key = None
         self._builder_protocol_name.set("Generated Protocol")
         self._builder_author.set("Opentrons Flowcell Console")
         self._builder_description.set("")
@@ -1315,7 +1324,7 @@ class OpentronsTab:
                 "This protocol is not a saved generated builder protocol in the library.",
             )
             return
-        _key, entry = found
+        key, entry = found
         params = dict(entry.get("params") or {})
         if str(entry.get("kind") or "").strip() != "generated_ui_protocol" or not params:
             messagebox.showerror(
@@ -1324,6 +1333,9 @@ class OpentronsTab:
             )
             return
         self._load_builder_spec(params)
+        self._builder_loaded_library_path = path
+        self._builder_loaded_library_key = key
+        self._builder_loaded_protocol_id = str(entry.get("protocol_id") or "").strip() or None
         try:
             self._main_notebook.select(1)
         except Exception:
@@ -1419,10 +1431,12 @@ class OpentronsTab:
         details = f"Opentrons {mode.upper()} {path.name}"
         if summary.has_pause:
             details += " [pause-aware]"
+        protocol_id = self._protocol_identity_for_path(path, summary.protocol_name)
         self._queue_opentrons_item(
             details=details,
             mode=mode,
             protocol_name=summary.protocol_name,
+            protocol_id=protocol_id,
             protocol_path=str(path),
             protocol_source=source_text,
             supports_pause=summary.has_pause,
@@ -1439,10 +1453,12 @@ class OpentronsTab:
             messagebox.showerror("Queue Error", str(exc))
             return
         self._apply_summary(summary)
+        protocol_id = self._protocol_identity_for_path(path, summary.protocol_name)
         self._queue_opentrons_resume_item(
             details=f"Opentrons RESUME {summary.protocol_name}",
             protocol_name=summary.protocol_name,
-            resume_key=self._resume_key(protocol_name=summary.protocol_name, protocol_source=source_text),
+            protocol_id=protocol_id,
+            protocol_path=str(path),
         )
 
     def add_home_to_queue(self) -> None:
@@ -1534,20 +1550,24 @@ class OpentronsTab:
         details: str,
         mode: str,
         protocol_name: str,
+        protocol_id: str | None = None,
         protocol_path: str | None = None,
         protocol_source: str | None = None,
         supports_pause: bool = False,
         robot_host: str | None = None,
         robot_port: int | None = None,
     ) -> None:
-        resume_key = self._resume_key(
+        filename = Path(protocol_path).name if protocol_path else f"{protocol_name}.py"
+        resolved_protocol_id = resolve_protocol_id(
+            protocol_id=protocol_id,
             protocol_name=protocol_name,
-            protocol_path=protocol_path,
-            protocol_source=protocol_source,
+            filename=filename,
         )
+        resume_key = resume_key_for_protocol(protocol_id=resolved_protocol_id)
         params = {
             "mode": mode,
             "protocol_name": protocol_name,
+            "protocol_id": resolved_protocol_id,
             "resume_key": resume_key,
             "supports_pause": bool(supports_pause),
         }
@@ -1579,8 +1599,16 @@ class OpentronsTab:
         *,
         details: str,
         protocol_name: str,
-        resume_key: str,
+        protocol_id: str | None = None,
+        protocol_path: str | None = None,
     ) -> None:
+        filename = Path(protocol_path).name if protocol_path else f"{protocol_name}.py"
+        resolved_protocol_id = resolve_protocol_id(
+            protocol_id=protocol_id,
+            protocol_name=protocol_name,
+            filename=filename,
+        )
+        resume_key = resume_key_for_protocol(protocol_id=resolved_protocol_id)
         item = {
             "type": "OPENTRONS_RESUME",
             "status": "pending",
@@ -1589,6 +1617,7 @@ class OpentronsTab:
                 "name": "RESUME",
                 "params": {
                     "protocol_name": protocol_name,
+                    "protocol_id": resolved_protocol_id,
                     "resume_key": resume_key,
                 },
             },
@@ -1624,18 +1653,30 @@ class OpentronsTab:
         except Exception as exc:
             messagebox.showerror("Queue Error", str(exc))
 
-    @staticmethod
-    def _resume_key(
-        *,
-        protocol_name: str,
-        protocol_path: str | None = None,
-        protocol_source: str | None = None,
-    ) -> str:
-        source = protocol_source
-        if source is None and protocol_path:
-            source = Path(protocol_path).read_text(encoding="utf-8")
-        payload = f"{protocol_name}\n{source or ''}"
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    def _protocol_identity_for_path(self, path: Path, protocol_name: str) -> str:
+        found = self._session.opentrons_registry.entry_for_path(path)
+        if found is None:
+            return resolve_protocol_id(protocol_name=protocol_name, filename=path.name)
+        key, entry = found
+        return resolve_protocol_id(
+            protocol_id=entry.get("protocol_id"),
+            protocol_name=protocol_name,
+            filename=path.name,
+            library_key=key,
+        )
+
+    def _builder_protocol_identity(self, protocol_name: str) -> str:
+        filename = (
+            self._builder_loaded_library_path.name
+            if self._builder_loaded_library_path is not None
+            else f"{protocol_name}.py"
+        )
+        return resolve_protocol_id(
+            protocol_id=self._builder_loaded_protocol_id,
+            protocol_name=protocol_name,
+            filename=filename,
+            library_key=self._builder_loaded_library_key,
+        )
 
     def _refresh_labware_tree(self) -> None:
         for row in self._labware_tree.get_children():
@@ -1967,11 +2008,13 @@ class OpentronsTab:
             return
         mode = self._mode_key(self._builder_mode_var.get())
         protocol_name = spec["metadata"]["protocol_name"]
+        protocol_id = self._builder_protocol_identity(protocol_name)
         details = f"Opentrons {mode.upper()} {protocol_name} (inline)"
         self._queue_opentrons_item(
             details=details,
             mode=mode,
             protocol_name=protocol_name,
+            protocol_id=protocol_id,
             protocol_source=source,
             supports_pause=bool(getattr(self._runner.inspect_protocol(source_text=source, protocol_name=protocol_name), "has_pause", False)),
             robot_host=self._robot_host(),
@@ -1985,10 +2028,11 @@ class OpentronsTab:
             messagebox.showerror("Build Failed", str(exc))
             return
         protocol_name = spec["metadata"]["protocol_name"]
+        protocol_id = self._builder_protocol_identity(protocol_name)
         self._queue_opentrons_resume_item(
             details=f"Opentrons RESUME {protocol_name}",
             protocol_name=protocol_name,
-            resume_key=self._resume_key(protocol_name=protocol_name, protocol_source=source),
+            protocol_id=protocol_id,
         )
 
     def save_builder_to_library(self) -> None:
@@ -2007,6 +2051,12 @@ class OpentronsTab:
         )
         self._load_protocol_files()
         self._var_path.set(str(path))
+        found = self._session.opentrons_registry.entry_for_path(path)
+        if found is not None:
+            key, entry = found
+            self._builder_loaded_library_path = path
+            self._builder_loaded_library_key = key
+            self._builder_loaded_protocol_id = str(entry.get("protocol_id") or "").strip() or None
         tip_state = self._record_builder_tip_usage(spec, event_name="protocol_saved") if created else None
         if tip_state is not None and bool(self._builder_auto_tip_tracking.get()):
             next_tip = str(tip_state.get("next_tip") or "").strip().upper()
@@ -2018,6 +2068,42 @@ class OpentronsTab:
             self.log("[Opentrons Tip Tracker] Existing saved protocol reused; tracked tip was not advanced.")
         self.log(f"[Opentrons Builder] Saved to library: {filename}")
         messagebox.showinfo("Saved", f"Protocol saved to library as:\n{filename}")
+
+    def update_builder_library_protocol(self) -> None:
+        if self._builder_loaded_library_path is None:
+            messagebox.showwarning(
+                "Update Unavailable",
+                "Load a saved generated library protocol into the builder first, then update it here.",
+            )
+            return
+        try:
+            source, spec = self._generate_builder_protocol()
+        except Exception as exc:
+            messagebox.showerror("Build Failed", str(exc))
+            return
+        protocol_name = spec["metadata"]["protocol_name"]
+        params = spec_hash_params(spec)
+        try:
+            path, filename = self._session.opentrons_registry.update_protocol(
+                self._builder_loaded_library_path,
+                kind="generated_ui_protocol",
+                source=source,
+                params=params,
+                note=protocol_name,
+            )
+        except Exception as exc:
+            messagebox.showerror("Update Failed", str(exc))
+            return
+        self._load_protocol_files()
+        self._var_path.set(str(path))
+        found = self._session.opentrons_registry.entry_for_path(path)
+        if found is not None:
+            key, entry = found
+            self._builder_loaded_library_path = path
+            self._builder_loaded_library_key = key
+            self._builder_loaded_protocol_id = str(entry.get("protocol_id") or "").strip() or None
+        self.log(f"[Opentrons Builder] Updated library protocol in place: {filename}")
+        messagebox.showinfo("Updated", f"Protocol updated in place:\n{filename}")
 
     @staticmethod
     def _describe_step(step: dict) -> str:

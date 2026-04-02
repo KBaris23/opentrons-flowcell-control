@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from config import OPENTRONS_LIBRARY_DIR, OPENTRONS_LIBRARY_MAP_FILE, OPENTRONS_PROTOCOLS_DIR
+from core.opentrons_identity import resolve_protocol_id
 
 _map: dict = {}
 
@@ -87,17 +88,30 @@ def lookup(hash_key: str) -> Optional[Path]:
     return None
 
 
-def register(hash_key: str, kind: str, params: dict, source: str, note: Optional[str] = None) -> Path:
+def register(
+    hash_key: str,
+    kind: str,
+    params: dict,
+    source: str,
+    note: Optional[str] = None,
+    protocol_id: Optional[str] = None,
+) -> Path:
     _ensure_dirs()
     stem = _filename_stem_from_note(note, fallback=hash_key)
     path = _unique_library_path(stem)
     path.write_text(source, encoding="utf-8")
+    resolved_protocol_id = resolve_protocol_id(
+        protocol_id=protocol_id,
+        protocol_name=(note or "").strip() or path.stem,
+        filename=path.name,
+    )
     _map[hash_key] = {
         "kind": kind,
         "params": params,
         "note": (note or "").strip(),
         "added_at": datetime.now().isoformat(timespec="seconds"),
         "filepath": str(path),
+        "protocol_id": resolved_protocol_id,
     }
     _persist()
     return path
@@ -106,6 +120,67 @@ def register(hash_key: str, kind: str, params: dict, source: str, note: Optional
 def all_entries() -> dict:
     load_map()
     return dict(_map)
+
+
+def entry_for_path(filepath) -> Optional[tuple[str, dict]]:
+    load_map()
+    target = Path(filepath).resolve()
+    for key, entry in _map.items():
+        try:
+            entry_path = Path(entry.get("filepath", "")).resolve()
+        except Exception:
+            continue
+        if entry_path != target:
+            continue
+        payload = dict(entry)
+        payload["hash_key"] = key
+        payload["protocol_id"] = resolve_protocol_id(
+            protocol_id=payload.get("protocol_id"),
+            protocol_name=str(payload.get("note") or entry_path.stem),
+            filename=entry_path.name,
+            library_key=key,
+        )
+        return key, payload
+    return None
+
+
+def update_protocol(
+    hash_key: str,
+    *,
+    kind: str,
+    params: dict,
+    source: str,
+    note: Optional[str] = None,
+    protocol_id: Optional[str] = None,
+) -> Optional[Path]:
+    load_map()
+    entry = _map.get(hash_key)
+    if entry is None:
+        return None
+    path = Path(entry.get("filepath", ""))
+    if not path.is_absolute():
+        path = path.resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+    resolved_note = (note or "").strip()
+    resolved_protocol_id = resolve_protocol_id(
+        protocol_id=protocol_id or entry.get("protocol_id"),
+        protocol_name=resolved_note or str(entry.get("note") or path.stem),
+        filename=path.name,
+        library_key=hash_key,
+    )
+    entry.update(
+        {
+            "kind": kind,
+            "params": params,
+            "note": resolved_note,
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+            "filepath": str(path),
+            "protocol_id": resolved_protocol_id,
+        }
+    )
+    _persist()
+    return path
 
 
 def remove(hash_key: str) -> bool:

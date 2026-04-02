@@ -7,7 +7,16 @@ from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
 from config import OPENTRONS_LIBRARY_DIR
-from robot.opentrons_library_map import all_entries, compute_hash, lookup, register, remove, update_note
+from robot.opentrons_library_map import (
+    all_entries,
+    compute_hash,
+    entry_for_path,
+    lookup,
+    register,
+    remove,
+    update_note,
+    update_protocol as update_library_protocol,
+)
 
 
 class OpentronsRegistry:
@@ -72,15 +81,39 @@ class OpentronsRegistry:
         return all_entries()
 
     def entry_for_path(self, filepath) -> Optional[tuple[str, dict]]:
-        target = Path(filepath).resolve()
-        for key, entry in all_entries().items():
-            try:
-                entry_path = Path(entry.get("filepath", "")).resolve()
-            except Exception:
-                continue
-            if entry_path == target:
-                return key, dict(entry)
-        return None
+        return entry_for_path(filepath)
+
+    def update_protocol(
+        self,
+        filepath,
+        *,
+        kind: str,
+        source: str,
+        params: Optional[dict] = None,
+        note: Optional[str] = None,
+    ) -> tuple[Path, str]:
+        found = self.entry_for_path(filepath)
+        if found is None:
+            raise FileNotFoundError(f"Selected file is not a saved library protocol: {filepath}")
+        key, entry = found
+        if params is None:
+            params = {"_source_hash": hashlib.sha1(source.encode("utf-8")).hexdigest()[:12]}
+        protocol_id = str(entry.get("protocol_id") or "").strip() or None
+        lib_path = update_library_protocol(
+            key,
+            kind=kind,
+            params=params,
+            source=source,
+            note=note,
+            protocol_id=protocol_id,
+        )
+        if lib_path is None:
+            raise FileNotFoundError(f"Library entry disappeared while updating: {filepath}")
+        filename = lib_path.name
+        self._registry[key] = (lib_path, filename)
+        self._path_to_key[str(lib_path)] = key
+        self._log(f"[Opentrons Library] Updated '{filename}' ({key})")
+        return lib_path, filename
 
     def delete_protocol(self, filepath) -> bool:
         found = self.entry_for_path(filepath)

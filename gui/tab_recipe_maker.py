@@ -11,7 +11,6 @@ This tab does not execute; it only composes recipe items for later use.
 
 import copy
 import json
-import hashlib
 import re
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -36,7 +35,9 @@ from core.pump_step_utils import (
     rate_for_target_eta,
     volume_to_ul,
 )
+from core.opentrons_identity import resolve_protocol_id, resume_key_for_protocol
 from robot import OpentronsProtocolRunner
+from robot.opentrons_library_map import entry_for_path as opentrons_library_entry_for_path
 
 
 class RecipeMakerTab:
@@ -729,9 +730,19 @@ class RecipeMakerTab:
         return path, protocol_name, source
 
     @staticmethod
-    def _opentrons_resume_key(protocol_name: str, source_text: str) -> str:
-        payload = f"{protocol_name}\n{source_text or ''}"
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    def _opentrons_identity(path: Path, protocol_name: str) -> tuple[str, str]:
+        found = opentrons_library_entry_for_path(path)
+        if found is None:
+            protocol_id = resolve_protocol_id(protocol_name=protocol_name, filename=path.name)
+        else:
+            key, entry = found
+            protocol_id = resolve_protocol_id(
+                protocol_id=entry.get("protocol_id"),
+                protocol_name=protocol_name,
+                filename=path.name,
+                library_key=key,
+            )
+        return protocol_id, resume_key_for_protocol(protocol_id=protocol_id)
 
     def _current_opentrons_robot_target(self) -> tuple[str, int]:
         host = (self._opentrons_robot_host_var.get() or "").strip()
@@ -752,6 +763,7 @@ class RecipeMakerTab:
         except Exception as exc:
             messagebox.showerror("Invalid Protocol", str(exc))
             return
+        protocol_id, resume_key = self._opentrons_identity(path, protocol_name)
         mode = (self._opentrons_mode_var.get() or "robot").strip().lower()
         details = f"Opentrons {mode.upper()} {path.name}"
         if summary.has_pause:
@@ -765,9 +777,10 @@ class RecipeMakerTab:
                 "params": {
                     "mode": mode,
                     "protocol_name": protocol_name,
+                    "protocol_id": protocol_id,
                     "protocol_path": str(path),
                     "protocol_source": source,
-                    "resume_key": self._opentrons_resume_key(protocol_name, source),
+                    "resume_key": resume_key,
                     "supports_pause": bool(summary.has_pause),
                     "robot_host": robot_host,
                     "robot_port": robot_port,
@@ -779,10 +792,11 @@ class RecipeMakerTab:
 
     def _add_opentrons_resume_step(self):
         try:
-            _path, protocol_name, source = self._current_opentrons_protocol()
+            path, protocol_name, _source = self._current_opentrons_protocol()
         except Exception as exc:
             messagebox.showerror("Invalid Protocol", str(exc))
             return
+        protocol_id, resume_key = self._opentrons_identity(path, protocol_name)
         item = {
             "type": "OPENTRONS_RESUME",
             "status": "pending",
@@ -791,7 +805,8 @@ class RecipeMakerTab:
                 "name": "RESUME",
                 "params": {
                     "protocol_name": protocol_name,
-                    "resume_key": self._opentrons_resume_key(protocol_name, source),
+                    "protocol_id": protocol_id,
+                    "resume_key": resume_key,
                 },
             },
         }
