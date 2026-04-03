@@ -14,8 +14,8 @@ APP_VERSION = "1.0.0"
 # ── Pump hardware defaults ────────────────────────────────────────────────────
 
 # Chemyx Fusion pump defaults (serial, Basic Mode)
-# Leave blank to auto-select from detected serial ports at runtime.
-CHEMYX_DEFAULT_PORT = ""
+# Default Chemyx serial port.
+CHEMYX_DEFAULT_PORT = "COM11"
 CHEMYX_DEFAULT_BAUD = 9600
 CHEMYX_DEFAULT_EOL  = "cr"   # "cr", "lf", or "crlf"
 CHEMYX_DEFAULT_UNITS        = "uLmin"

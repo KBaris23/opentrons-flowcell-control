@@ -21,6 +21,7 @@ from config import (
     APP_VERSION,
     WINDOW_TITLE,
     WINDOW_GEOMETRY,
+    CHEMYX_DEFAULT_PORT,
     SLACK_ENABLE,
     SLACK_BOT_TOKEN,
     SLACK_SIGNING_SECRET,
@@ -402,6 +403,7 @@ class ElectrochemGUI:
                 save_raw_packets = self._session.save_raw_packets,
                 simulate_measurements = self._session.simulate_measurements,
                 invert_current = (technique == "SWV"),
+                pump_com_port = CHEMYX_DEFAULT_PORT,
                 preferred_port = self._session.device_port,
             )
             self._session.current_runner = runner
@@ -463,6 +465,7 @@ class ElectrochemGUI:
                     save_raw_packets=self._session.save_raw_packets,
                     simulate_measurements=self._session.simulate_measurements,
                     invert_current=(technique == "SWV"),
+                    pump_com_port=CHEMYX_DEFAULT_PORT,
                     preferred_port=self._session.device_port)
                 self._session.current_runner = runner
                 ok, csv_path = runner.execute(meas_tag=meas_tag)
@@ -520,6 +523,7 @@ class ElectrochemGUI:
                     save_raw_packets=self._session.save_raw_packets,
                     simulate_measurements=self._session.simulate_measurements,
                     invert_current=True,
+                    pump_com_port=CHEMYX_DEFAULT_PORT,
                     preferred_port=self._session.device_port)
                 self._session.current_runner = runner
                 ok, csv_path = runner.execute(meas_tag=meas_tag)
@@ -584,6 +588,7 @@ class ElectrochemGUI:
                         save_raw_packets=self._session.save_raw_packets,
                         simulate_measurements=self._session.simulate_measurements,
                         invert_current=True,
+                        pump_com_port=CHEMYX_DEFAULT_PORT,
                         preferred_port=self._session.device_port)
                     self._session.current_runner = runner
                     ok, csv_path = runner.execute(meas_tag=meas_tag)

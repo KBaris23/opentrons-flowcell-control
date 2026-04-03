@@ -21,9 +21,8 @@ def run(protocol: protocol_api.ProtocolContext):
     stock = protocol.load_labware('opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap', '2')
     dilute = protocol.load_labware('opentrons_6_tuberack_falcon_50ml_conical', '3')
     pipette_primary = protocol.load_instrument('p20_single_gen2', 'left', tip_racks=[tips_20ul])
-    pipette_primary.starting_tip = tips_20ul['G4']
     pipette_secondary = protocol.load_instrument('p300_single_gen2', 'right', tip_racks=[tips_200ul])
-    pipette_secondary.starting_tip = tips_200ul['F1']
+    pipette_secondary.starting_tip = tips_200ul['A2']
 
     protocol.comment('start titration step 1')
     pipette_primary.transfer(0.975, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')

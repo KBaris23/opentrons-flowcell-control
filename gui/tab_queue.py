@@ -27,6 +27,7 @@ from config import (
     OPENTRONS_PROTOCOLS_DIR,
     OPENTRONS_DEFAULT_API_PORT,
     OPENTRONS_DEFAULT_HOST,
+    CHEMYX_DEFAULT_PORT,
     COLLECTION_SYRINGE_CAPACITY_ML,
     FLOWCELL_FILL_VOLUME_UL,
     FLOWCELL_FILL_TARGET_S,
@@ -83,6 +84,8 @@ class QueueTab:
         self._build()
         self._session.register_collection_state_listener(self._schedule_refresh_labels)
         self._schedule_refresh_labels()
+
+    _TIP_WELL_RE = re.compile(r"^[A-Z]+[1-9][0-9]*$")
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
@@ -1522,6 +1525,7 @@ class QueueTab:
                             save_raw_packets=self._session.save_raw_packets,
                             simulate_measurements=self._session.simulate_measurements,
                             invert_current=(item.get("type") == "SWV"),
+                            pump_com_port=CHEMYX_DEFAULT_PORT,
                             preferred_port=self._session.device_port,
                         )
                         self._session.current_runner = runner
@@ -1771,14 +1775,127 @@ class QueueTab:
         self._root.after(0, self.set_status, "Pause complete")
         return True
 
-    def _exec_alert(self, message: str) -> bool:
+    def _exec_alert(self, message: str, *, title: str = "Paused", status_text: str | None = None) -> bool:
         if not self._session.is_running:
             return False
         done = threading.Event()
-        self._root.after(0, lambda: (messagebox.showinfo("Paused", message), done.set()))
+        display_status = status_text or "Paused - waiting for Continue"
+        self._root.after(0, self.set_status, display_status)
+        self._root.after(0, lambda: (messagebox.showinfo(title, message), done.set()))
         while self._session.is_running and not done.is_set():
             done.wait(timeout=0.2)
+        if self._session.is_running:
+            self._root.after(0, self.set_status, "Continue acknowledged")
         return done.is_set()
+
+    @classmethod
+    def _normalize_tip_well(cls, value) -> str:
+        text = str(value or "").strip().upper()
+        return text if cls._TIP_WELL_RE.fullmatch(text) else ""
+
+    @classmethod
+    def _tip_override_from_params(cls, params: dict | None) -> dict | None:
+        raw = dict((params or {}).get("tip_override") or {})
+        if not cls._boolish(raw.get("enabled"), default=False):
+            return None
+        left_tip = cls._normalize_tip_well(raw.get("left_starting_tip"))
+        right_tip = cls._normalize_tip_well(raw.get("right_starting_tip"))
+        if not left_tip and not right_tip:
+            raise ValueError("Tip override is enabled, but no valid left/right starting tip was provided.")
+        return {
+            "enabled": True,
+            "left_starting_tip": left_tip,
+            "right_starting_tip": right_tip,
+            "require_confirmation": cls._boolish(raw.get("require_confirmation"), default=True),
+            "confirmation_message": str(raw.get("confirmation_message") or "").strip(),
+        }
+
+    @staticmethod
+    def _format_tip_override_summary(override: dict) -> str:
+        parts = []
+        if override.get("left_starting_tip"):
+            parts.append(f"left={override['left_starting_tip']}")
+        if override.get("right_starting_tip"):
+            parts.append(f"right={override['right_starting_tip']}")
+        return ", ".join(parts) if parts else "no mount overrides"
+
+    @classmethod
+    def _tip_override_confirmation_message(cls, protocol_name: str, override: dict) -> str:
+        summary = cls._format_tip_override_summary(override)
+        return (
+            f"Tip override is active for {protocol_name}.\n"
+            f"Confirm the OT-2 tipracks are set to {summary} before continuing."
+        )
+
+    @classmethod
+    def _apply_opentrons_tip_override(cls, source_text: str, override: dict) -> tuple[str, list[str]]:
+        lines = str(source_text or "").splitlines()
+        if not lines:
+            raise ValueError("Protocol source is empty.")
+
+        load_pattern = re.compile(
+            r"^(?P<indent>\s*)(?P<var>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*protocol\.load_instrument\([^,]+,\s*['\"](?P<mount>left|right)['\"].*tip_racks=\[(?P<tiprack>[A-Za-z_][A-Za-z0-9_]*)\]"
+        )
+        starting_tip_pattern = re.compile(
+            r"^\s*(?P<var>[A-Za-z_][A-Za-z0-9_]*)\.starting_tip\s*="
+        )
+
+        instruments_by_mount: dict[str, dict[str, str | int]] = {}
+        for index, line in enumerate(lines):
+            match = load_pattern.match(line)
+            if not match:
+                continue
+            instruments_by_mount[match.group("mount")] = {
+                "index": index,
+                "indent": match.group("indent"),
+                "var": match.group("var"),
+                "tiprack": match.group("tiprack"),
+            }
+
+        requested = {
+            "left": str(override.get("left_starting_tip") or "").strip().upper(),
+            "right": str(override.get("right_starting_tip") or "").strip().upper(),
+        }
+        missing_mounts = [mount for mount, tip in requested.items() if tip and mount not in instruments_by_mount]
+        if missing_mounts:
+            raise ValueError(
+                "Protocol does not load instrument(s) on mount(s): " + ", ".join(missing_mounts)
+            )
+
+        target_vars = {
+            str(info["var"])
+            for mount, info in instruments_by_mount.items()
+            if requested.get(mount)
+        }
+
+        filtered_lines: list[str] = []
+        for line in lines:
+            match = starting_tip_pattern.match(line)
+            if match and match.group("var") in target_vars:
+                continue
+            filtered_lines.append(line)
+        lines = filtered_lines
+
+        injected_lines: list[str] = []
+        applied: list[str] = []
+        for line in lines:
+            injected_lines.append(line)
+            match = load_pattern.match(line)
+            if not match:
+                continue
+            mount = match.group("mount")
+            tip = requested.get(mount)
+            if not tip:
+                continue
+            indent = match.group("indent")
+            instrument_var = match.group("var")
+            tiprack_var = match.group("tiprack")
+            injected_lines.append(f"{indent}{instrument_var}.starting_tip = {tiprack_var}[{tip!r}]")
+            applied.append(f"{mount}={tip}")
+
+        if not applied:
+            raise ValueError("No matching pipette load statements were found for the requested tip override.")
+        return "\n".join(injected_lines) + "\n", applied
 
     # ── Pump execution ────────────────────────────────────────────────────────
 
@@ -1831,17 +1948,30 @@ class QueueTab:
                 return True
 
             if name == "HEXW2":
+                session_mgr = getattr(self._session, "session_manager", None)
                 if collection_info is not None:
                     projected_ul = self._session.collection_volume_ul + collection_info["step_volume_ul"]
                     if collection_info["capacity_ul"] > 0 and projected_ul > collection_info["capacity_ul"]:
                         msg = (
                             "Collection syringe capacity would be exceeded. "
                             f"Projected total {format_ml_from_ul(projected_ul)} > "
-                            f"{format_ml_from_ul(collection_info['capacity_ul'])}."
+                            f"{format_ml_from_ul(collection_info['capacity_ul'])}.\n\n"
+                            "Empty/reset the collection syringe before continuing. "
+                            "The queue will stop after you acknowledge this alert."
                         )
                         self.log(msg)
+                        if session_mgr is not None:
+                            session_mgr.notify_slack(f"Collection capacity hit: {msg}")
+                        acknowledged = self._exec_alert(
+                            msg,
+                            title="Collection Capacity",
+                            status_text="Collection capacity reached - waiting for Continue",
+                        )
                         self._session.is_running = False
-                        self._root.after(0, lambda m=msg: messagebox.showerror("Collection Capacity", m))
+                        if acknowledged:
+                            self.log("Collection capacity acknowledged; queue stopped for syringe service/reset.")
+                        else:
+                            self.log("Collection capacity alert interrupted; queue stopped.")
                         return False
                     if (
                         collection_info["warn_ul"] > 0
@@ -1854,7 +1984,8 @@ class QueueTab:
                             f"Projected total after this pull: {format_ml_from_ul(projected_ul)}."
                         )
                         self.log(f"WARNING: {warn_msg}")
-                        self._root.after(0, lambda m=warn_msg: messagebox.showwarning("Collection Warning", m))
+                        if session_mgr is not None:
+                            session_mgr.notify_slack(f"Collection warning: {warn_msg}")
 
                 run_kwargs = {
                     "units": str(params["units"]),
@@ -1952,6 +2083,42 @@ class QueueTab:
                 self.log(f"Opentrons protocol not found: {protocol_path}")
                 return "failed"
 
+        effective_protocol_source = str(protocol_source) if protocol_source else None
+        if effective_protocol_source is None and resolved is not None:
+            try:
+                effective_protocol_source = resolved.read_text(encoding="utf-8")
+            except Exception as exc:
+                self.log(f"[Opentrons] Could not read protocol source for overrides: {exc}")
+                return "failed"
+
+        try:
+            tip_override = self._tip_override_from_params(params)
+        except Exception as exc:
+            self.log(f"[Opentrons] Invalid tip override settings for {protocol_name}: {exc}")
+            return "failed"
+        if tip_override is not None:
+            if effective_protocol_source is None:
+                self.log(f"[Opentrons] Tip override requested for {protocol_name}, but no protocol source is available.")
+                return "failed"
+            try:
+                effective_protocol_source, applied = self._apply_opentrons_tip_override(
+                    effective_protocol_source,
+                    tip_override,
+                )
+            except Exception as exc:
+                self.log(f"[Opentrons] Tip override failed for {protocol_name}: {exc}")
+                return "failed"
+            summary = ", ".join(applied)
+            self.log(f"[Opentrons] Applying starting tip override for {protocol_name}: {summary}")
+            if tip_override.get("require_confirmation"):
+                confirm_msg = (
+                    str(tip_override.get("confirmation_message") or "").strip()
+                    or self._tip_override_confirmation_message(protocol_name, tip_override)
+                )
+                if not self._exec_alert(confirm_msg):
+                    self.log(f"[Opentrons] Tip override confirmation interrupted for {protocol_name}.")
+                    return "stopped"
+
         session_mgr = getattr(self._session, "session_manager", None)
         data_folder = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
 
@@ -1965,7 +2132,7 @@ class QueueTab:
         try:
             result = runner.execute_detailed(
                 resolved,
-                source_text=str(protocol_source) if protocol_source else None,
+                source_text=effective_protocol_source,
                 protocol_name=protocol_name,
                 mode=mode,
                 data_folder=data_folder,

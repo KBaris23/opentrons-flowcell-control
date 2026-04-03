@@ -66,6 +66,7 @@ class RecipeMakerTab:
         self._build()
 
     _COMPRESS_SEND_DEST_DIR = Path(r"Z:\opentrons(setup_4)")
+    _TIP_WELL_RE = re.compile(r"^[A-Z]+[1-9][0-9]*$")
 
     # ── Build ──────────────────────────────────────────────────────────────
 
@@ -103,6 +104,8 @@ class RecipeMakerTab:
                    command=self._save_recipe).pack(side="left", padx=4)
         ttk.Button(ctrl, text="Load",
                    command=self._load_recipe).pack(side="left", padx=4)
+        ttk.Button(ctrl, text="Validate",
+                   command=self._show_recipe_validation).pack(side="left", padx=4)
         ttk.Button(ctrl, text="Clear",
                    command=self._clear_recipe).pack(side="left", padx=4)
         ttk.Separator(ctrl, orient="vertical").pack(side="left", fill="y", padx=6)
@@ -110,6 +113,12 @@ class RecipeMakerTab:
                    command=self._send_to_queue).pack(side="left", padx=4)
         self._lbl_collection_plan = ttk.Label(ctrl, text="Collection plan: 0 steps | 0.000 mL", foreground="#555")
         self._lbl_collection_plan.pack(side="right", padx=4)
+        self._lbl_recipe_help = ttk.Label(
+            top,
+            text="Build recipes step by step. Use Validate before Send to Queue for a quick safety check.",
+            foreground="#666",
+        )
+        self._lbl_recipe_help.pack(anchor="w", padx=10, pady=(0, 4))
 
 
         # ── Recipe Treeview
@@ -368,8 +377,8 @@ class RecipeMakerTab:
             row=3, column=2, columnspan=2, **pad, sticky="w"
         )
 
-        self._pump_track_collection = tk.BooleanVar(value=False)
-        ttk.Checkbutton(parent, text="Track collected volume", variable=self._pump_track_collection).grid(
+        self._pump_track_collection = tk.BooleanVar(value=True)
+        ttk.Checkbutton(parent, text="Track collected volume (Recommended)", variable=self._pump_track_collection).grid(
             row=3, column=5, columnspan=2, padx=6, pady=4, sticky="w"
         )
 
@@ -642,6 +651,42 @@ class RecipeMakerTab:
         self._opentrons_robot_port_var = tk.StringVar(value=str(int(OPENTRONS_DEFAULT_API_PORT)))
         ttk.Entry(form, textvariable=self._opentrons_robot_port_var, width=10).grid(row=2, column=3, **pad, sticky="w")
 
+        self._opentrons_use_existing_tips_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            form,
+            text="Use saved protocol starting tips (Recommended)",
+            variable=self._opentrons_use_existing_tips_var,
+            command=self._refresh_opentrons_tip_override_ui,
+        ).grid(row=3, column=0, columnspan=2, **pad, sticky="w")
+
+        ttk.Label(form, text="Left start tip:").grid(row=3, column=2, **pad, sticky="e")
+        self._opentrons_left_tip_var = tk.StringVar(value="")
+        self._opentrons_left_tip_entry = ttk.Entry(form, textvariable=self._opentrons_left_tip_var, width=10)
+        self._opentrons_left_tip_entry.grid(row=3, column=3, **pad, sticky="w")
+
+        ttk.Label(form, text="Right start tip:").grid(row=3, column=4, **pad, sticky="e")
+        self._opentrons_right_tip_var = tk.StringVar(value="")
+        self._opentrons_right_tip_entry = ttk.Entry(form, textvariable=self._opentrons_right_tip_var, width=10)
+        self._opentrons_right_tip_entry.grid(row=3, column=5, **pad, sticky="w")
+
+        self._opentrons_tip_override_hint = ttk.Label(
+            form,
+            text="If unchecked, this recipe step will override left/right OT-2 starting tips and pause for confirmation before the run.",
+            foreground="#666",
+            wraplength=760,
+            justify="left",
+        )
+        self._opentrons_tip_override_hint.grid(row=4, column=0, columnspan=6, padx=6, pady=(0, 4), sticky="w")
+
+        self._opentrons_summary_var = tk.StringVar(value="Select an Opentrons protocol to see what will happen.")
+        ttk.Label(
+            form,
+            textvariable=self._opentrons_summary_var,
+            foreground="#1f4e79",
+            wraplength=760,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=6, padx=6, pady=(0, 4), sticky="w")
+
         btns = ttk.Frame(parent)
         btns.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(btns, text="Add Protocol Step", command=self._add_opentrons_protocol_step).pack(side="left", padx=4)
@@ -652,13 +697,25 @@ class RecipeMakerTab:
             parent,
             text=(
                 "Use this for existing pause-capable Opentrons scripts. Add the protocol step first, "
-                "then place a matching resume step later in the recipe."
+                "then place the matching resume step after the measurements/pump actions that should happen while OT-2 is paused."
             ),
             foreground="#666",
         )
         hint.pack(side="bottom", anchor="w", padx=8, pady=(0, 6))
 
         self._load_opentrons_protocols()
+        self._refresh_opentrons_tip_override_ui()
+        for var in (
+            self._opentrons_mode_var,
+            self._opentrons_name_var,
+            self._opentrons_path_var,
+            self._opentrons_left_tip_var,
+            self._opentrons_right_tip_var,
+        ):
+            try:
+                var.trace_add("write", self._refresh_opentrons_summary)
+            except Exception:
+                pass
 
     def _opentrons_protocol_label(self, path: Path, root: Path) -> str:
         try:
@@ -709,8 +766,9 @@ class RecipeMakerTab:
             self._opentrons_name_var.set(summary.protocol_name or path.stem)
         except Exception:
             self._opentrons_name_var.set(path.stem)
+        self._refresh_opentrons_summary()
 
-    def _current_opentrons_protocol(self) -> tuple[Path, str, str]:
+    def _current_opentrons_protocol(self) -> tuple[Path, str]:
         raw = (self._opentrons_path_var.get() or "").strip()
         if not raw:
             raise ValueError("Select an Opentrons protocol first.")
@@ -726,8 +784,83 @@ class RecipeMakerTab:
                 protocol_name = self._opentrons_runner.inspect_protocol(path).protocol_name or path.stem
             except Exception:
                 protocol_name = path.stem
-        source = path.read_text(encoding="utf-8")
-        return path, protocol_name, source
+        return path, protocol_name
+
+    @classmethod
+    def _normalize_tip_well(cls, value) -> str:
+        text = str(value or "").strip().upper()
+        return text if cls._TIP_WELL_RE.fullmatch(text) else ""
+
+    def _refresh_opentrons_tip_override_ui(self):
+        use_existing = bool(self._opentrons_use_existing_tips_var.get())
+        state = "disabled" if use_existing else "normal"
+        for widget in (self._opentrons_left_tip_entry, self._opentrons_right_tip_entry):
+            try:
+                widget.configure(state=state)
+            except Exception:
+                pass
+        self._refresh_opentrons_summary()
+
+    def _refresh_opentrons_summary(self, *_args):
+        path_text = (self._opentrons_path_var.get() or "").strip()
+        if not path_text:
+            self._opentrons_summary_var.set("Select an Opentrons protocol to see what will happen.")
+            return
+        path = Path(path_text)
+        protocol_name = (self._opentrons_name_var.get() or path.stem).strip() or path.stem
+        mode = (self._opentrons_mode_var.get() or "robot").strip().lower()
+        try:
+            summary = self._opentrons_runner.inspect_protocol(path)
+            pause_aware = bool(summary.has_pause)
+        except Exception:
+            pause_aware = False
+        parts = [f"This will queue OT-2 {mode} run for {protocol_name}."]
+        if bool(self._opentrons_use_existing_tips_var.get()):
+            parts.append("It will keep the starting tips saved in the protocol.")
+        else:
+            left_tip = self._normalize_tip_well(self._opentrons_left_tip_var.get())
+            right_tip = self._normalize_tip_well(self._opentrons_right_tip_var.get())
+            tips = []
+            if left_tip:
+                tips.append(f"left={left_tip}")
+            if right_tip:
+                tips.append(f"right={right_tip}")
+            if tips:
+                parts.append("It will override starting tips to " + ", ".join(tips) + " and ask for confirmation before running.")
+            else:
+                parts.append("It will expect you to enter at least one override tip before adding the step.")
+        if pause_aware:
+            parts.append("Because this protocol pauses, add as many resume steps as you need manually wherever they belong in the recipe.")
+        else:
+            parts.append("This protocol is not marked pause-aware.")
+        self._opentrons_summary_var.set(" ".join(parts))
+
+    def _current_tip_override(self) -> dict | None:
+        if bool(self._opentrons_use_existing_tips_var.get()):
+            return None
+        left_tip = self._normalize_tip_well(self._opentrons_left_tip_var.get())
+        right_tip = self._normalize_tip_well(self._opentrons_right_tip_var.get())
+        if not left_tip and not right_tip:
+            raise ValueError("Enter at least one valid OT-2 starting tip override, such as A1 or D4.")
+        return {
+            "enabled": True,
+            "left_starting_tip": left_tip,
+            "right_starting_tip": right_tip,
+            "require_confirmation": True,
+        }
+
+    @staticmethod
+    def _tip_override_details(override: dict | None) -> str:
+        if not override:
+            return ""
+        bits = []
+        if override.get("left_starting_tip"):
+            bits.append(f"L={override['left_starting_tip']}")
+        if override.get("right_starting_tip"):
+            bits.append(f"R={override['right_starting_tip']}")
+        if not bits:
+            return ""
+        return " [tip override " + " ".join(bits) + "]"
 
     @staticmethod
     def _opentrons_identity(path: Path, protocol_name: str) -> tuple[str, str]:
@@ -757,9 +890,10 @@ class RecipeMakerTab:
 
     def _add_opentrons_protocol_step(self):
         try:
-            path, protocol_name, source = self._current_opentrons_protocol()
+            path, protocol_name = self._current_opentrons_protocol()
             summary = self._opentrons_runner.inspect_protocol(path)
             robot_host, robot_port = self._current_opentrons_robot_target()
+            tip_override = self._current_tip_override()
         except Exception as exc:
             messagebox.showerror("Invalid Protocol", str(exc))
             return
@@ -768,6 +902,7 @@ class RecipeMakerTab:
         details = f"Opentrons {mode.upper()} {path.name}"
         if summary.has_pause:
             details += " [pause-aware]"
+        details += self._tip_override_details(tip_override)
         item = {
             "type": "OPENTRONS_PROTOCOL",
             "status": "pending",
@@ -779,11 +914,11 @@ class RecipeMakerTab:
                     "protocol_name": protocol_name,
                     "protocol_id": protocol_id,
                     "protocol_path": str(path),
-                    "protocol_source": source,
                     "resume_key": resume_key,
                     "supports_pause": bool(summary.has_pause),
                     "robot_host": robot_host,
                     "robot_port": robot_port,
+                    "tip_override": tip_override or {"enabled": False},
                 },
             },
         }
@@ -792,9 +927,16 @@ class RecipeMakerTab:
 
     def _add_opentrons_resume_step(self):
         try:
-            path, protocol_name, _source = self._current_opentrons_protocol()
+            path, protocol_name = self._current_opentrons_protocol()
+            summary = self._opentrons_runner.inspect_protocol(path)
         except Exception as exc:
             messagebox.showerror("Invalid Protocol", str(exc))
+            return
+        if not bool(summary.has_pause):
+            messagebox.showwarning(
+                "Resume Not Needed",
+                f"{protocol_name} is not pause-aware, so it should not have a resume step.",
+            )
             return
         protocol_id, resume_key = self._opentrons_identity(path, protocol_name)
         item = {
@@ -1048,6 +1190,168 @@ class RecipeMakerTab:
             text=f"Collection plan: {steps} steps | {total_ul / 1000.0:.3f} mL"
         )
 
+    @staticmethod
+    def _resume_key_style(resume_key: str) -> str:
+        text = str(resume_key or "").strip()
+        return "new" if text.startswith("resume_otproto_") else ("legacy" if text else "missing")
+
+    @classmethod
+    def _migrate_recipe_resume_keys(cls, items: list[dict]) -> tuple[list[dict], int]:
+        migrated = [copy.deepcopy(item) for item in (items or [])]
+        protocol_step_info: list[dict] = []
+        for item in migrated:
+            if str(item.get("type") or "").upper() != "OPENTRONS_PROTOCOL":
+                continue
+            action = item.get("opentrons_action") or {}
+            params = dict(action.get("params") or {})
+            protocol_name = str(params.get("protocol_name") or "").strip()
+            protocol_path = str(params.get("protocol_path") or "").strip()
+            if not protocol_name or not protocol_path:
+                continue
+            path = Path(protocol_path)
+            protocol_id, resume_key = cls._opentrons_identity(path, protocol_name)
+            old_resume_key = str(params.get("resume_key") or "").strip()
+            params["protocol_id"] = protocol_id
+            params["resume_key"] = resume_key
+            action["params"] = params
+            item["opentrons_action"] = action
+            protocol_step_info.append(
+                {
+                    "protocol_name": protocol_name,
+                    "old_resume_key": old_resume_key,
+                    "new_resume_key": resume_key,
+                    "protocol_id": protocol_id,
+                }
+            )
+
+        changed = 0
+        if protocol_step_info:
+            by_old_key = {
+                info["old_resume_key"]: info
+                for info in protocol_step_info
+                if info["old_resume_key"]
+            }
+            by_protocol_name: dict[str, list[dict]] = {}
+            for info in protocol_step_info:
+                by_protocol_name.setdefault(info["protocol_name"], []).append(info)
+
+            for item in migrated:
+                if str(item.get("type") or "").upper() != "OPENTRONS_RESUME":
+                    continue
+                action = item.get("opentrons_action") or {}
+                params = dict(action.get("params") or {})
+                old_resume_key = str(params.get("resume_key") or "").strip()
+                protocol_name = str(params.get("protocol_name") or "").strip()
+                match = by_old_key.get(old_resume_key)
+                if match is None and len(by_protocol_name.get(protocol_name, [])) == 1:
+                    match = by_protocol_name[protocol_name][0]
+                if match is None:
+                    continue
+                if params.get("resume_key") != match["new_resume_key"] or params.get("protocol_id") != match["protocol_id"]:
+                    params["resume_key"] = match["new_resume_key"]
+                    params["protocol_id"] = match["protocol_id"]
+                    action["params"] = params
+                    item["opentrons_action"] = action
+                    changed += 1
+
+            for item, info in zip(
+                [i for i in migrated if str(i.get("type") or "").upper() == "OPENTRONS_PROTOCOL"],
+                protocol_step_info,
+            ):
+                params = ((item.get("opentrons_action") or {}).get("params") or {})
+                if str(info["old_resume_key"] or "").strip() != str(info["new_resume_key"] or "").strip():
+                    changed += 1
+        return migrated, changed
+
+    def _compact_recipe_item(self, item: dict) -> dict:
+        compact = copy.deepcopy(item)
+        if str(compact.get("type") or "").upper().startswith("OPENTRONS_"):
+            action = compact.get("opentrons_action") or {}
+            params = dict(action.get("params") or {})
+            params.pop("protocol_source", None)
+            action["params"] = params
+            compact["opentrons_action"] = action
+        return compact
+
+    def _compact_recipe_items(self, items: list[dict] | None = None) -> list[dict]:
+        return [self._compact_recipe_item(item) for item in (items or self._recipe)]
+
+    def _validate_recipe(self) -> tuple[list[str], list[str]]:
+        errors: list[str] = []
+        warnings: list[str] = []
+        paused_protocols: dict[str, int] = {}
+        resumes_seen: dict[str, int] = {}
+
+        for index, item in enumerate(self._recipe, start=1):
+            item_type = str(item.get("type") or "").upper()
+            if item_type.startswith("OPENTRONS_"):
+                action = item.get("opentrons_action") or {}
+                params = dict(action.get("params") or {})
+                action_name = str(action.get("name") or "").strip().upper()
+                protocol_name = str(params.get("protocol_name") or f"item {index}").strip()
+                protocol_path = str(params.get("protocol_path") or "").strip()
+                resume_key = str(params.get("resume_key") or "").strip()
+
+                if action_name == "PROTOCOL":
+                    if not protocol_path:
+                        errors.append(f"Row {index}: Opentrons protocol step is missing a protocol path.")
+                    elif not Path(protocol_path).exists():
+                        errors.append(f"Row {index}: Opentrons protocol file was not found: {protocol_path}")
+                    if self._resume_key_style(resume_key) == "legacy":
+                        warnings.append(f"Row {index}: {protocol_name} still uses a legacy resume key.")
+                    if bool(params.get("supports_pause")):
+                        paused_protocols[resume_key] = index
+                    override = params.get("tip_override") or {}
+                    if bool(override.get("enabled")):
+                        left_tip = self._normalize_tip_well(override.get("left_starting_tip"))
+                        right_tip = self._normalize_tip_well(override.get("right_starting_tip"))
+                        if not left_tip and not right_tip:
+                            errors.append(f"Row {index}: tip override is enabled but no valid left/right tip was set.")
+
+                elif action_name == "RESUME":
+                    if not resume_key:
+                        errors.append(f"Row {index}: Opentrons resume step is missing a resume key.")
+                    resumes_seen[resume_key] = resumes_seen.get(resume_key, 0) + 1
+
+            elif item_type == "PUMP_HEXW2":
+                params = ((item.get("pump_action") or {}).get("params") or {})
+                mode = str(params.get("mode") or "").strip().lower()
+                if mode == "withdraw" and not bool(params.get("track_collection", False)):
+                    warnings.append(f"Row {index}: HEXW2 withdraw does not track collected volume.")
+
+        for resume_key, row in paused_protocols.items():
+            if not resume_key:
+                continue
+            if resumes_seen.get(resume_key, 0) == 0:
+                warnings.append(f"Row {row}: pause-aware Opentrons protocol has no matching resume step later in the recipe.")
+
+        for index, item in enumerate(self._recipe, start=1):
+            item_type = str(item.get("type") or "").upper()
+            if item_type != "OPENTRONS_RESUME":
+                continue
+            params = ((item.get("opentrons_action") or {}).get("params") or {})
+            resume_key = str(params.get("resume_key") or "").strip()
+            if resume_key and resume_key not in paused_protocols:
+                warnings.append(f"Row {index}: resume step does not match any pause-aware Opentrons protocol in this recipe.")
+
+        return errors, warnings
+
+    def _show_recipe_validation(self):
+        errors, warnings = self._validate_recipe()
+        if not errors and not warnings:
+            messagebox.showinfo("Recipe Check", "No obvious recipe problems were found.")
+            return
+        lines = []
+        if errors:
+            lines.append("Errors:")
+            lines.extend(f"- {msg}" for msg in errors)
+        if warnings:
+            if lines:
+                lines.append("")
+            lines.append("Warnings:")
+            lines.extend(f"- {msg}" for msg in warnings)
+        messagebox.showwarning("Recipe Check", "\n".join(lines))
+
     def _selected_indices(self):
         return sorted(
             self._tree.index(iid) for iid in self._tree.selection() if iid
@@ -1169,7 +1473,20 @@ class RecipeMakerTab:
         if not callable(self._on_send_to_queue):
             messagebox.showwarning("Unavailable", "Queue is not available.")
             return
-        for item in self._recipe:
+        errors, warnings = self._validate_recipe()
+        if errors:
+            messagebox.showerror("Recipe Has Errors", "\n".join(errors))
+            return
+        if warnings:
+            proceed = messagebox.askyesno(
+                "Recipe Warnings",
+                "The recipe has warnings:\n\n"
+                + "\n".join(f"- {msg}" for msg in warnings[:10])
+                + ("\n\nContinue sending to queue anyway?" if len(warnings) <= 10 else "\n\nContinue sending to queue anyway?"),
+            )
+            if not proceed:
+                return
+        for item in self._compact_recipe_items():
             cloned = copy.deepcopy(item)
             cloned["status"] = "pending"
             self._on_send_to_queue(cloned)
@@ -1503,7 +1820,7 @@ class RecipeMakerTab:
         )
 
         track_collection_var = tk.BooleanVar(value=fields["track_collection"])
-        ttk.Checkbutton(win, text="Track collected volume", variable=track_collection_var).grid(
+        ttk.Checkbutton(win, text="Track collected volume (Recommended)", variable=track_collection_var).grid(
             row=3, column=5, columnspan=2, padx=6, pady=4, sticky="w"
         )
 
@@ -1623,7 +1940,21 @@ class RecipeMakerTab:
         )
         if not path:
             return
-        payload = {"items": self._recipe}
+        errors, warnings = self._validate_recipe()
+        if errors:
+            messagebox.showerror("Recipe Has Errors", "\n".join(errors))
+            return
+        if warnings:
+            proceed = messagebox.askyesno(
+                "Recipe Warnings",
+                "The recipe has warnings:\n\n"
+                + "\n".join(f"- {msg}" for msg in warnings[:10])
+                + "\n\nSave anyway?",
+            )
+            if not proceed:
+                return
+        migrated_items, _ = self._migrate_recipe_resume_keys(self._recipe)
+        payload = {"items": self._compact_recipe_items(migrated_items)}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
 
@@ -1640,8 +1971,14 @@ class RecipeMakerTab:
             items = payload.get("items", [])
             if not isinstance(items, list):
                 raise ValueError("Invalid recipe format: items is not a list.")
-            self._recipe = items
+            migrated_items, changed = self._migrate_recipe_resume_keys(items)
+            self._recipe = [copy.deepcopy(item) for item in migrated_items]
             self._refresh()
+            if changed:
+                messagebox.showinfo(
+                    "Recipe Updated",
+                    f"Migrated {changed} Opentrons resume key entr{'y' if changed == 1 else 'ies'} to the new format while loading.",
+                )
         except Exception as exc:
             messagebox.showerror("Load failed", str(exc))
 

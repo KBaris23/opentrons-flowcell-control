@@ -19,7 +19,7 @@ import serial.tools.list_ports
 
 from core.mscript_parser import to_si_string
 from core.runner import format_port_info
-from config import DEVICE_KEYWORDS
+from config import DEVICE_KEYWORDS, CHEMYX_DEFAULT_PORT
 from core.session import SessionState
 from gui.tab_custom_script import CustomScriptPanel
 
@@ -220,6 +220,7 @@ class MethodTab:
     @staticmethod
     def _auto_detect_port(ports):
         candidates = []
+        pump_upper = str(CHEMYX_DEFAULT_PORT or "").strip().upper() or None
         for port in ports:
             haystack = " ".join(
                 str(s) for s in (
@@ -233,7 +234,11 @@ class MethodTab:
                 candidates.append(port.device)
         if not candidates:
             return None
-        return sorted(candidates)[0]
+        if pump_upper is not None:
+            candidates.sort(key=lambda dev: (str(dev).strip().upper() == pump_upper, str(dev)))
+        else:
+            candidates.sort()
+        return candidates[0]
 
     # ── Parameter forms ───────────────────────────────────────────────────────
 

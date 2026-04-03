@@ -313,9 +313,10 @@
       "pipette": {
         "model": "p20_single_gen2",
         "mount": "left",
-        "starting_tip": "D4",
+        "starting_tip": "F1",
         "tiprack_alias": "tips"
       },
+      "secondary_pipette": null,
       "steps": [
         {
           "comment": "Titration step 1",
@@ -327,6 +328,7 @@
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
+          "pipette_key": "primary",
           "source_alias": "stock",
           "source_well": "D1",
           "volume_ul": 5.0
@@ -345,6 +347,7 @@
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
+          "pipette_key": "primary",
           "source_alias": "stock",
           "source_well": "D1",
           "volume_ul": 5.0
@@ -363,6 +366,7 @@
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
+          "pipette_key": "primary",
           "source_alias": "stock",
           "source_well": "D1",
           "volume_ul": 5.0
@@ -381,6 +385,7 @@
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
+          "pipette_key": "primary",
           "source_alias": "stock",
           "source_well": "D1",
           "volume_ul": 5.0
@@ -399,6 +404,7 @@
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
+          "pipette_key": "primary",
           "source_alias": "stock",
           "source_well": "D1",
           "volume_ul": 5.0
@@ -406,12 +412,18 @@
         {
           "comment": "Titrations complete",
           "kind": "comment"
+        },
+        {
+          "comment": "test",
+          "kind": "comment"
         }
       ]
     },
     "note": "Titration_5x5uL",
     "added_at": "2026-03-31T12:24:08",
-    "filepath": "opentrons_protocols\\library\\Titration_5x5uL.py"
+    "filepath": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_5x5uL.py",
+    "updated_at": "2026-04-02T15:32:01",
+    "protocol_id": "otproto_f316495900d3b8e6"
   },
   "generated_ui_protocol_9cac37": {
     "kind": "generated_ui_protocol",
@@ -486,7 +498,7 @@
     "added_at": "2026-03-31T17:49:20",
     "filepath": "opentrons_protocols\\library\\dual_switching_dry_run.py"
   },
-  "generated_ui_protocol_f5bb05": {
+  "generated_ui_protocol_71814a": {
     "kind": "generated_ui_protocol",
     "params": {
       "labware": [
@@ -521,13 +533,13 @@
       "pipette": {
         "model": "p20_single_gen2",
         "mount": "left",
-        "starting_tip": "G4",
+        "starting_tip": "A1",
         "tiprack_alias": "tips_20ul"
       },
       "secondary_pipette": {
         "model": "p300_single_gen2",
         "mount": "right",
-        "starting_tip": "F1",
+        "starting_tip": "A2",
         "tiprack_alias": "tips_200ul"
       },
       "steps": [
@@ -705,7 +717,7 @@
       ]
     },
     "note": "Titration_Kana_10_steps",
-    "added_at": "2026-03-31T18:31:22",
+    "added_at": "2026-04-01T18:02:49",
     "filepath": "opentrons_protocols\\library\\Titration_Kana_10_steps.py"
   }
 }

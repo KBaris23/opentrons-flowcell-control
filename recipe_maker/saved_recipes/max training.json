@@ -10,8 +10,9 @@
           "mode": "robot",
           "protocol_name": "max_training",
           "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\generated_ui_protocol_586f7d.py",
-          "resume_key": "0f6bb3ea14db030b",
-          "supports_pause": true
+          "resume_key": "resume_otproto_0457a2db394ba074",
+          "supports_pause": true,
+          "protocol_id": "otproto_0457a2db394ba074"
         }
       }
     },
@@ -274,7 +275,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "max_training",
-          "resume_key": "0f6bb3ea14db030b"
+          "resume_key": "resume_otproto_0457a2db394ba074",
+          "protocol_id": "otproto_0457a2db394ba074"
         }
       }
     },
@@ -537,7 +539,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "max_training",
-          "resume_key": "0f6bb3ea14db030b"
+          "resume_key": "resume_otproto_0457a2db394ba074",
+          "protocol_id": "otproto_0457a2db394ba074"
         }
       }
     },
@@ -800,7 +803,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "max_training",
-          "resume_key": "0f6bb3ea14db030b"
+          "resume_key": "resume_otproto_0457a2db394ba074",
+          "protocol_id": "otproto_0457a2db394ba074"
         }
       }
     },
@@ -1063,7 +1067,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "max_training",
-          "resume_key": "0f6bb3ea14db030b"
+          "resume_key": "resume_otproto_0457a2db394ba074",
+          "protocol_id": "otproto_0457a2db394ba074"
         }
       }
     },
@@ -1326,7 +1331,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "max_training",
-          "resume_key": "0f6bb3ea14db030b"
+          "resume_key": "resume_otproto_0457a2db394ba074",
+          "protocol_id": "otproto_0457a2db394ba074"
         }
       }
     }

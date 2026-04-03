@@ -3,18 +3,18 @@
     {
       "type": "PUMP_HEXW2",
       "status": "pending",
-      "details": "Pump: HEXW2 withdraw 250 @ 1500 (uLmin) | eta 10.0s",
+      "details": "Pump: HEXW2 withdraw 500 @ 1500 (uLmin) | eta 20.0s",
       "pump_action": {
         "name": "HEXW2",
         "params": {
           "units": "uLmin",
           "mode": "withdraw",
           "diameter_mm": 12.1,
-          "volume": 250.0,
+          "volume": 500.0,
           "rate": 1500.0,
           "delay_min": 0.0,
           "start": true,
-          "target_eta_s": 10.0,
+          "target_eta_s": 20.0,
           "track_collection": false,
           "collection_capacity_ml": 5.0,
           "collection_warn_ml": 4.5
@@ -9252,11 +9252,11 @@
           "mode": "robot",
           "protocol_name": "Titration_Kana_10_steps",
           "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Kana_10_steps.py",
-          "protocol_source": "\"\"\"Generated Opentrons protocol.\"\"\"\n\nfrom opentrons import protocol_api\n\nmetadata = {\n    \"protocolName\": 'Titration_Kana_10_steps',\n    \"author\": 'Opentrons Flowcell Console',\n    \"description\": 'titration with 0, 0.975, 0.950, 1.8551, 33,604, 7.017, 13.667, 26.660, 52.219, 103.211 uL pipetting',\n    \"source\": \"opentrons-flowcell-control-ui\",\n    \"apiLevel\": '2.19',\n}\n\nrequirements = {\n    \"robotType\": 'OT-2',\n}\n\n\ndef run(protocol: protocol_api.ProtocolContext):\n    tips_20ul = protocol.load_labware('opentrons_96_filtertiprack_20ul', '7')\n    tips_200ul = protocol.load_labware('opentrons_96_filtertiprack_200ul', '8')\n    stock = protocol.load_labware('opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap', '2')\n    dilute = protocol.load_labware('opentrons_6_tuberack_falcon_50ml_conical', '3')\n    pipette_primary = protocol.load_instrument('p20_single_gen2', 'left', tip_racks=[tips_20ul])\n    pipette_primary.starting_tip = tips_20ul['G4']\n    pipette_secondary = protocol.load_instrument('p300_single_gen2', 'right', tip_racks=[tips_200ul])\n    pipette_secondary.starting_tip = tips_200ul['F1']\n\n    protocol.comment('start titration step 1')\n    pipette_primary.transfer(0.975, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('first step done')\n    protocol.comment('start titration step 2')\n    pipette_primary.transfer(0.95, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 2 done')\n    protocol.comment('start titration step 3')\n    pipette_primary.transfer(1.851, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 3 done')\n    protocol.comment('start titration step 4')\n    pipette_primary.transfer(3.604, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 4 done')\n    protocol.comment('start titration step 5')\n    pipette_primary.transfer(7.017, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 5 done')\n    protocol.comment('start titration step 6')\n    pipette_primary.transfer(13.667, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 6 done')\n    protocol.comment('start titration step 7')\n    pipette_secondary.transfer(26.66, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 7 done')\n    protocol.comment('start titration step 8')\n    pipette_secondary.transfer(52.219, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.pause('step 8 done')\n    protocol.comment('start titration step 9')\n    pipette_secondary.transfer(103.211, stock['D1'].bottom(2), dilute['A2'].bottom(2), new_tip='always')\n    protocol.comment('titration completed')\n",
-          "resume_key": "17ae9342a6525831",
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
           "supports_pause": true,
           "robot_host": "169.254.229.52",
-          "robot_port": 31950
+          "robot_port": 31950,
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -13895,7 +13895,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -18534,7 +18535,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -23173,7 +23175,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -27812,7 +27815,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -32451,7 +32455,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -37090,7 +37095,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -41729,7 +41735,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
@@ -46368,7 +46375,8 @@
         "name": "RESUME",
         "params": {
           "protocol_name": "Titration_Kana_10_steps",
-          "resume_key": "17ae9342a6525831"
+          "resume_key": "resume_otproto_15e794fb5f7f78f8",
+          "protocol_id": "otproto_15e794fb5f7f78f8"
         }
       }
     },
