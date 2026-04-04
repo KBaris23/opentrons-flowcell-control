@@ -14,6 +14,7 @@ Requires:
 
 import sys
 import os
+import signal
 import tkinter as tk
 
 # Make sure the package root is on sys.path so all imports resolve
@@ -26,8 +27,43 @@ from gui.app import ElectrochemGUI
 
 def main():
     root = tk.Tk()
-    _app = ElectrochemGUI(root)
-    root.mainloop()
+    app = ElectrochemGUI(root)
+
+    def _request_close():
+        try:
+            app.request_close()
+        except Exception:
+            try:
+                root.quit()
+            except Exception:
+                pass
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    def _handle_sigint(_signum, _frame):
+        _request_close()
+
+    try:
+        signal.signal(signal.SIGINT, _handle_sigint)
+    except Exception:
+        pass
+
+    def _signal_keepalive():
+        if getattr(app, "_closing", False):
+            return
+        try:
+            root.after(100, _signal_keepalive)
+        except Exception:
+            pass
+
+    root.after(100, _signal_keepalive)
+
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        _request_close()
 
 
 if __name__ == "__main__":

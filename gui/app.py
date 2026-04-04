@@ -76,7 +76,11 @@ class ElectrochemGUI:
         self.root.title(WINDOW_TITLE)
         self.root.geometry(WINDOW_GEOMETRY)
         self._apply_theme()
+        self._closing = False
         self._ngrok_proc = None
+        self._default_report_callback_exception = self.root.report_callback_exception
+        self.root.report_callback_exception = self._report_callback_exception
+        self.root.protocol("WM_DELETE_WINDOW", self.request_close)
 
         # ── Pump controller (optional) ────────────────────────────────────────
         if PUMP_AVAILABLE and ChemyxPumpCtrl is not None:
@@ -342,6 +346,58 @@ class ElectrochemGUI:
         self.root.unbind("<ButtonRelease-1>")
 
     # ── Immediate run dispatcher ──────────────────────────────────────────────
+
+    def _report_callback_exception(self, exc, val, tb):
+        if exc is KeyboardInterrupt or isinstance(val, KeyboardInterrupt):
+            try:
+                self._session_mgr.log("KeyboardInterrupt received during Tk callback; closing application.")
+            except Exception:
+                pass
+            self.request_close()
+            return
+        try:
+            self._default_report_callback_exception(exc, val, tb)
+        except Exception:
+            import traceback
+            traceback.print_exception(exc, val, tb)
+
+    def request_close(self):
+        if self._closing:
+            return
+        self._closing = True
+        try:
+            self._session.is_running = False
+        except Exception:
+            pass
+        try:
+            self._session.stop_current_runner()
+        except Exception:
+            pass
+        try:
+            if self._slack_bot is not None:
+                self._slack_bot.stop()
+        except Exception:
+            pass
+        try:
+            self._stop_ngrok_tunnel()
+        except Exception:
+            pass
+        try:
+            if self._pump_ctrl is not None:
+                self._pump_ctrl.disconnect()
+        except Exception:
+            pass
+        try:
+            self.root.after_idle(self.root.quit)
+        except Exception:
+            pass
+        try:
+            self.root.after_idle(self.root.destroy)
+        except Exception:
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
 
     def _run_now(self, technique: str, script_or_base, extra=None):
         """Handle all 'Run Now' requests from MethodTab.

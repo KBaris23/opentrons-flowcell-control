@@ -80,6 +80,7 @@ class QueueTab:
         self._last_queue_path  = None
         self._opentrons_paused_runs: dict[str, dict] = {}
         self._active_opentrons_target: dict[str, str | int | None] | None = None
+        self._preconfirmed_opentrons_indices: set[int] = set()
 
         self._build()
         self._session.register_collection_state_listener(self._schedule_refresh_labels)
@@ -1248,12 +1249,15 @@ class QueueTab:
             messagebox.showwarning("Empty Queue", "No items in queue."); return
         if self._session.is_running:
             messagebox.showwarning("Already Running", "Queue already running."); return
+        self._preconfirmed_opentrons_indices.clear()
         if not self._has_motion_step(start_index=0):
             messagebox.showwarning(
                 "No Motion Step",
                 "Queue contains no motion/measurement step. "
                 "Pump APPLY only sets parameters and does not move liquid.",
             )
+        if not self._preflight_queue_start(start_index=0):
+            return
         self._session.is_running = True
         self._session.update_queue_status(
             state="running",
@@ -1285,6 +1289,7 @@ class QueueTab:
             messagebox.showwarning("Empty Queue", "No items in queue."); return
         if self._session.is_running:
             messagebox.showwarning("Already Running", "Queue already running."); return
+        self._preconfirmed_opentrons_indices.clear()
         sel = self._tree.selection()
         if not sel:
             messagebox.showwarning("No Selection", "Select a queue item to start from.")
@@ -1300,6 +1305,8 @@ class QueueTab:
                 "Selected range has no motion/measurement step. "
                 "Pump APPLY only sets parameters and does not move liquid.",
             )
+        if not self._preflight_queue_start(start_index=idx):
+            return
         self._session.is_running = True
         self._session.update_queue_status(
             state="running",
@@ -1341,10 +1348,55 @@ class QueueTab:
             return True
         return False
 
+    def _preflight_queue_start(self, start_index: int) -> bool:
+        confirmations: list[str] = []
+        preconfirmed_indices: set[int] = set()
+        queue = list(self._session.measurement_queue)
+        for index, item in enumerate(queue[start_index:], start=start_index):
+            item_type = str(item.get("type") or "").upper()
+            if not item_type.startswith("OPENTRONS_"):
+                continue
+            action = item.get("opentrons_action") or {}
+            action_name = str(action.get("name") or "").strip().upper()
+            if action_name != "PROTOCOL":
+                continue
+            try:
+                prepared = self._prepare_opentrons_protocol_execution(item)
+            except Exception as exc:
+                self._preconfirmed_opentrons_indices.clear()
+                self.log(f"[Queue Preflight] Row {index + 1}: {exc}")
+                self.set_status("Queue start blocked")
+                messagebox.showerror("Queue Start Blocked", f"Row {index + 1}: {exc}")
+                return False
+            tip_override = prepared.get("tip_override")
+            if tip_override is None or not tip_override.get("require_confirmation"):
+                continue
+            protocol_name = str(prepared.get("protocol_name") or f"row {index + 1}").strip()
+            confirm_msg = (
+                str(prepared.get("tip_override_confirmation_message") or "").strip()
+                or self._tip_override_confirmation_message(protocol_name, tip_override)
+            )
+            confirmations.append(f"Row {index + 1} - {protocol_name}\n{confirm_msg}")
+            preconfirmed_indices.add(index)
+
+        self._preconfirmed_opentrons_indices = preconfirmed_indices
+        if confirmations:
+            messagebox.showinfo(
+                "Queue Start Confirmations",
+                "Please confirm these OT-2 setup details before the queue begins:\n\n"
+                + "\n\n".join(confirmations),
+            )
+            self.log(
+                "[Queue Preflight] Confirmed "
+                f"{len(confirmations)} Opentrons tip override entr{'y' if len(confirmations) == 1 else 'ies'} before queue start."
+            )
+        return True
+
     def stop_queue(self):
         queue_was_running = bool(self._session.is_running)
         self.log("Queue stop requested.")
         self._session.is_running = False
+        self._preconfirmed_opentrons_indices.clear()
         self._session.stop_current_runner()
         self._session.update_queue_status(state="stopping")
         self.set_status("Queue Stopping")
@@ -1551,6 +1603,7 @@ class QueueTab:
                     break
 
         self._session.is_running = False
+        self._preconfirmed_opentrons_indices.clear()
         self.log("Queue completed.")
         self._root.after(0, self.set_status, "Queue Complete")
         self._announce_queue_end(start_index=start_index)
@@ -1827,6 +1880,66 @@ class QueueTab:
             f"Confirm the OT-2 tipracks are set to {summary} before continuing."
         )
 
+    def _prepare_opentrons_protocol_execution(self, item: dict) -> dict:
+        action_info = item.get("opentrons_action") or {}
+        params = action_info.get("params") or {}
+        protocol_path = params.get("protocol_path")
+        protocol_source = params.get("protocol_source")
+        protocol_name = str(params.get("protocol_name") or "").strip() or "inline protocol"
+        mode = str(params.get("mode") or "validate").lower()
+        resume_key = str(params.get("resume_key") or "").strip()
+        robot_host = str(params.get("robot_host") or "").strip() or None
+        robot_port_raw = params.get("robot_port")
+        try:
+            robot_port = int(robot_port_raw) if robot_port_raw is not None else 31950
+        except Exception as exc:
+            raise ValueError(f"Invalid Opentrons robot_port: {robot_port_raw}") from exc
+        if mode == "robot" and not robot_host:
+            robot_host = str(OPENTRONS_DEFAULT_HOST or "").strip() or None
+            robot_port = int(robot_port or OPENTRONS_DEFAULT_API_PORT)
+
+        if not protocol_path and not protocol_source:
+            raise ValueError("Invalid Opentrons item: missing protocol_path/protocol_source.")
+
+        resolved = None
+        if protocol_path:
+            resolved = self._resolve_opentrons_protocol_path(protocol_path)
+            if resolved is None and not protocol_source:
+                raise FileNotFoundError(f"Opentrons protocol not found: {protocol_path}")
+
+        effective_protocol_source = str(protocol_source) if protocol_source else None
+        if effective_protocol_source is None and resolved is not None:
+            try:
+                effective_protocol_source = resolved.read_text(encoding="utf-8")
+            except Exception as exc:
+                raise ValueError(f"[Opentrons] Could not read protocol source for overrides: {exc}") from exc
+
+        tip_override = self._tip_override_from_params(params)
+        applied = []
+        if tip_override is not None:
+            if effective_protocol_source is None:
+                raise ValueError(f"Tip override requested for {protocol_name}, but no protocol source is available.")
+            effective_protocol_source, applied = self._apply_opentrons_tip_override(
+                effective_protocol_source,
+                tip_override,
+            )
+        return {
+            "resolved": resolved,
+            "protocol_name": protocol_name,
+            "mode": mode,
+            "resume_key": resume_key,
+            "robot_host": robot_host,
+            "robot_port": robot_port,
+            "effective_protocol_source": effective_protocol_source,
+            "tip_override": tip_override,
+            "tip_override_applied": applied,
+            "tip_override_summary": ", ".join(applied),
+            "tip_override_confirmation_message": (
+                str(tip_override.get("confirmation_message") or "").strip()
+                or self._tip_override_confirmation_message(protocol_name, tip_override)
+            ) if tip_override and tip_override.get("require_confirmation") else "",
+        }
+
     @classmethod
     def _apply_opentrons_tip_override(cls, source_text: str, override: dict) -> tuple[str, list[str]]:
         lines = str(source_text or "").splitlines()
@@ -2054,70 +2167,30 @@ class QueueTab:
         return self._exec_opentrons_protocol(item, queue_index=queue_index)
 
     def _exec_opentrons_protocol(self, item: dict, *, queue_index: int | None = None) -> str:
-        action_info = item.get("opentrons_action") or {}
-        params = action_info.get("params") or {}
-        protocol_path = params.get("protocol_path")
-        protocol_source = params.get("protocol_source")
-        protocol_name = str(params.get("protocol_name") or "").strip() or "inline protocol"
-        mode = str(params.get("mode") or "validate").lower()
-        resume_key = str(params.get("resume_key") or "").strip()
-        robot_host = str(params.get("robot_host") or "").strip() or None
-        robot_port_raw = params.get("robot_port")
         try:
-            robot_port = int(robot_port_raw) if robot_port_raw is not None else 31950
-        except Exception:
-            self.log(f"Invalid Opentrons robot_port in queue item: {robot_port_raw}")
-            return "failed"
-        if mode == "robot" and not robot_host:
-            robot_host = str(OPENTRONS_DEFAULT_HOST or "").strip() or None
-            robot_port = int(robot_port or OPENTRONS_DEFAULT_API_PORT)
-
-        if not protocol_path and not protocol_source:
-            self.log("Invalid Opentrons item: missing protocol_path/protocol_source.")
-            return "failed"
-
-        resolved = None
-        if protocol_path:
-            resolved = self._resolve_opentrons_protocol_path(protocol_path)
-            if resolved is None and not protocol_source:
-                self.log(f"Opentrons protocol not found: {protocol_path}")
-                return "failed"
-
-        effective_protocol_source = str(protocol_source) if protocol_source else None
-        if effective_protocol_source is None and resolved is not None:
-            try:
-                effective_protocol_source = resolved.read_text(encoding="utf-8")
-            except Exception as exc:
-                self.log(f"[Opentrons] Could not read protocol source for overrides: {exc}")
-                return "failed"
-
-        try:
-            tip_override = self._tip_override_from_params(params)
+            prepared = self._prepare_opentrons_protocol_execution(item)
         except Exception as exc:
-            self.log(f"[Opentrons] Invalid tip override settings for {protocol_name}: {exc}")
+            self.log(f"[Opentrons] {exc}")
             return "failed"
+        resolved = prepared["resolved"]
+        protocol_name = str(prepared["protocol_name"] or "").strip() or "inline protocol"
+        mode = str(prepared["mode"] or "validate").strip().lower()
+        resume_key = str(prepared["resume_key"] or "").strip()
+        robot_host = prepared["robot_host"]
+        robot_port = int(prepared["robot_port"] or 31950)
+        effective_protocol_source = prepared["effective_protocol_source"]
+        tip_override = prepared["tip_override"]
         if tip_override is not None:
-            if effective_protocol_source is None:
-                self.log(f"[Opentrons] Tip override requested for {protocol_name}, but no protocol source is available.")
-                return "failed"
-            try:
-                effective_protocol_source, applied = self._apply_opentrons_tip_override(
-                    effective_protocol_source,
-                    tip_override,
-                )
-            except Exception as exc:
-                self.log(f"[Opentrons] Tip override failed for {protocol_name}: {exc}")
-                return "failed"
-            summary = ", ".join(applied)
+            summary = str(prepared.get("tip_override_summary") or "").strip()
             self.log(f"[Opentrons] Applying starting tip override for {protocol_name}: {summary}")
-            if tip_override.get("require_confirmation"):
-                confirm_msg = (
-                    str(tip_override.get("confirmation_message") or "").strip()
-                    or self._tip_override_confirmation_message(protocol_name, tip_override)
-                )
+            preconfirmed = queue_index is not None and queue_index in self._preconfirmed_opentrons_indices
+            if tip_override.get("require_confirmation") and not preconfirmed:
+                confirm_msg = str(prepared.get("tip_override_confirmation_message") or "").strip()
                 if not self._exec_alert(confirm_msg):
                     self.log(f"[Opentrons] Tip override confirmation interrupted for {protocol_name}.")
                     return "stopped"
+            elif tip_override.get("require_confirmation") and preconfirmed:
+                self.log(f"[Opentrons] Tip override confirmation already acknowledged at queue start for {protocol_name}.")
 
         session_mgr = getattr(self._session, "session_manager", None)
         data_folder = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
