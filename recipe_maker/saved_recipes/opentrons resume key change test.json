@@ -1,0 +1,126 @@
+{
+  "metadata": {
+    "saved_at": "2026-04-03T16:26:27",
+    "version": 1
+  },
+  "items": [
+    {
+      "type": "OPENTRONS_PROTOCOL",
+      "status": "failed",
+      "details": "Opentrons ROBOT Titration_5x5uL.py [pause-aware] [tip override L=A1 R=A1]",
+      "opentrons_action": {
+        "name": "PROTOCOL",
+        "params": {
+          "mode": "robot",
+          "protocol_name": "Titration_5x5uL",
+          "protocol_id": "otproto_f316495900d3b8e6",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_5x5uL.py",
+          "resume_key": "resume_otproto_f316495900d3b8e6",
+          "supports_pause": true,
+          "robot_host": "169.254.229.52",
+          "robot_port": 31950,
+          "tip_override": {
+            "enabled": true,
+            "left_starting_tip": "A1",
+            "right_starting_tip": "A1",
+            "require_confirmation": true
+          }
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "completed",
+      "details": "Pump: HEXW2 withdraw 250 @ 3000 (uLmin) | eta 5.0s | collect 0.250 mL | warn 4.5/5 mL",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 250.0,
+          "rate": 3000.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": true,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "failed",
+      "details": "Opentrons RESUME Titration_5x5uL",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "Titration_5x5uL",
+          "protocol_id": "otproto_f316495900d3b8e6",
+          "resume_key": "resume_otproto_f316495900d3b8e6"
+        }
+      }
+    },
+    {
+      "type": "PUMP_HEXW2",
+      "status": "completed",
+      "details": "Pump: HEXW2 withdraw 250 @ 3000 (uLmin) | eta 5.0s | collect 0.250 mL | warn 4.5/5 mL",
+      "pump_action": {
+        "name": "HEXW2",
+        "params": {
+          "units": "uLmin",
+          "mode": "withdraw",
+          "diameter_mm": 12.1,
+          "volume": 250.0,
+          "rate": 3000.0,
+          "delay_min": 0.0,
+          "start": true,
+          "target_eta_s": 5.0,
+          "track_collection": true,
+          "collection_capacity_ml": 5.0,
+          "collection_warn_ml": 4.5
+        }
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "failed",
+      "details": "Opentrons RESUME Titration_5x5uL",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "Titration_5x5uL",
+          "protocol_id": "otproto_f316495900d3b8e6",
+          "resume_key": "resume_otproto_f316495900d3b8e6"
+        }
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "failed",
+      "details": "Opentrons RESUME Titration_5x5uL",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "Titration_5x5uL",
+          "protocol_id": "otproto_f316495900d3b8e6",
+          "resume_key": "resume_otproto_f316495900d3b8e6"
+        }
+      }
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "failed",
+      "details": "Opentrons RESUME Titration_5x5uL",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "Titration_5x5uL",
+          "protocol_id": "otproto_f316495900d3b8e6",
+          "resume_key": "resume_otproto_f316495900d3b8e6"
+        }
+      }
+    }
+  ]
+}

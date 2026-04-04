@@ -44,6 +44,7 @@ class ProtocolSummary:
     robot_type: str = ""
     has_run: bool = False
     has_pause: bool = False
+    instrument_mounts: tuple[str, ...] = ()
     metadata: dict = field(default_factory=dict)
     requirements: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -201,6 +202,7 @@ class OpentronsProtocolRunner:
             )
             for node in ast.walk(tree)
         )
+        instrument_mounts = self._extract_instrument_mounts(tree)
 
         warnings: list[str] = []
         if not metadata:
@@ -219,6 +221,7 @@ class OpentronsProtocolRunner:
             robot_type=str(requirements.get("robotType") or ""),
             has_run=has_run,
             has_pause=has_pause,
+            instrument_mounts=instrument_mounts,
             metadata=metadata,
             requirements=requirements,
             warnings=warnings,
@@ -680,6 +683,39 @@ class OpentronsProtocolRunner:
                         return {}
                     return value if isinstance(value, dict) else {}
         return {}
+
+    @staticmethod
+    def _extract_instrument_mounts(tree: ast.AST) -> tuple[str, ...]:
+        ordered_mounts: list[str] = []
+        seen_mounts: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "load_instrument"):
+                continue
+            mount = None
+            if len(node.args) >= 2:
+                mount = OpentronsProtocolRunner._literal_string(node.args[1])
+            if mount is None:
+                for keyword in node.keywords:
+                    if keyword.arg == "mount":
+                        mount = OpentronsProtocolRunner._literal_string(keyword.value)
+                        break
+            normalized = str(mount or "").strip().lower()
+            if normalized not in {"left", "right"} or normalized in seen_mounts:
+                continue
+            seen_mounts.add(normalized)
+            ordered_mounts.append(normalized)
+        return tuple(ordered_mounts)
+
+    @staticmethod
+    def _literal_string(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Str):
+            return node.s
+        return None
 
     @staticmethod
     def _load_module(
