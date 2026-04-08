@@ -1692,10 +1692,12 @@ class RecipeMakerTab:
             )
             if not proceed:
                 return
+        queued_items = []
         for item in self._compact_recipe_items():
             cloned = copy.deepcopy(item)
             cloned["status"] = "pending"
-            self._on_send_to_queue(cloned)
+            queued_items.append(cloned)
+        self._on_send_to_queue(queued_items)
 
     def _build_pump_item(
         self,
@@ -2531,24 +2533,30 @@ class RecipeMakerTab:
         top.pack(fill="x", padx=6, pady=6)
         misc = ttk.LabelFrame(parent, text="Miscellaneous")
         misc.pack(fill="x", padx=6, pady=(0, 6))
-        self._misc_folder_mode_var = tk.StringVar(value="current_experiment")
+        self._misc_folder_mode_var = tk.StringVar(value="current_session")
         self._misc_folder_path_var = tk.StringVar(value="")
+        ttk.Radiobutton(
+            misc,
+            text="Current session folder",
+            variable=self._misc_folder_mode_var,
+            value="current_session",
+        ).grid(row=0, column=0, columnspan=2, padx=6, pady=4, sticky="w")
         ttk.Radiobutton(
             misc,
             text="Current experiment folder",
             variable=self._misc_folder_mode_var,
             value="current_experiment",
-        ).grid(row=0, column=0, columnspan=2, padx=6, pady=4, sticky="w")
+        ).grid(row=1, column=0, columnspan=2, padx=6, pady=4, sticky="w")
         ttk.Radiobutton(
             misc,
-            text="Specific measurement folder",
+            text="Specific folder",
             variable=self._misc_folder_mode_var,
             value="specific_folder",
-        ).grid(row=1, column=0, padx=6, pady=4, sticky="w")
-        ttk.Entry(misc, textvariable=self._misc_folder_path_var, width=60).grid(row=1, column=1, padx=6, pady=4, sticky="ew")
-        ttk.Button(misc, text="Browse", command=self._browse_misc_folder).grid(row=1, column=2, padx=6, pady=4, sticky="w")
+        ).grid(row=2, column=0, padx=6, pady=4, sticky="w")
+        ttk.Entry(misc, textvariable=self._misc_folder_path_var, width=60).grid(row=2, column=1, padx=6, pady=4, sticky="ew")
+        ttk.Button(misc, text="Browse", command=self._browse_misc_folder).grid(row=2, column=2, padx=6, pady=4, sticky="w")
         ttk.Button(misc, text="Add Compress + Send", command=self._add_compress_send_block).grid(
-            row=0, column=3, rowspan=2, padx=6, pady=4, sticky="e"
+            row=0, column=3, rowspan=3, padx=6, pady=4, sticky="e"
         )
         misc.columnconfigure(1, weight=1)
         ttk.Button(top, text="Refresh Blocks",
@@ -2590,21 +2598,25 @@ class RecipeMakerTab:
 
     def _browse_misc_folder(self):
         initial_dir = str((self._repo_root / "measurement_data").resolve())
-        selected = filedialog.askdirectory(title="Select Measurement Folder", initialdir=initial_dir)
+        selected = filedialog.askdirectory(title="Select Folder to Compress", initialdir=initial_dir)
         if selected:
             self._misc_folder_mode_var.set("specific_folder")
             self._misc_folder_path_var.set(selected)
 
     def _add_compress_send_block(self):
-        mode = (self._misc_folder_mode_var.get() or "current_experiment").strip()
+        mode = (self._misc_folder_mode_var.get() or "current_session").strip()
         folder_path = (self._misc_folder_path_var.get() or "").strip()
         if mode == "specific_folder" and not folder_path:
-            messagebox.showwarning("Missing Folder", "Choose a measurement folder first.")
+            messagebox.showwarning("Missing Folder", "Choose a folder first.")
             return
         details = (
             f"Compress + send folder: {folder_path}"
             if mode == "specific_folder"
-            else "Compress + send current experiment folder"
+            else (
+                "Compress + send current session folder"
+                if mode == "current_session"
+                else "Compress + send current experiment folder"
+            )
         )
         item = {
             "type": "MISC_COMPRESS_SEND",

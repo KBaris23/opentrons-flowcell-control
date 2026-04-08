@@ -166,7 +166,7 @@ class ElectrochemGUI:
 
         self._recipe_tab = RecipeMakerTab(
             parent_frame = recipe_frame,
-            on_send_to_queue = self._queue_tab.add_item,
+            on_send_to_queue = self._queue_tab.add_items,
         )
 
         self._opentrons_tab = OpentronsTab(

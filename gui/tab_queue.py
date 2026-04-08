@@ -195,16 +195,30 @@ class QueueTab:
 
     # ── Public API (used by app.py and MethodTab) ─────────────────────────────
 
-    def add_item(self, item: dict):
-        """Append a queue item dict and refresh the display."""
+    def _prepare_queue_item(self, item: dict):
         prepared = item
         if isinstance(item, dict):
             resolved = self._deserialize(item)
             if resolved is not None:
                 prepared = resolved
+        return prepared
+
+    def add_item(self, item: dict):
+        """Append one queue item dict, refresh the display, and log the add."""
+        prepared = self._prepare_queue_item(item)
         self._session.measurement_queue.append(prepared)
         self.refresh()
         self.log(f"Queue add: {prepared.get('details', prepared.get('type'))}")
+
+    def add_items(self, items: list[dict]) -> int:
+        """Append multiple queue items with a single refresh and no per-item log spam."""
+        if not items:
+            return 0
+        prepared_items = [self._prepare_queue_item(item) for item in items]
+        self._session.measurement_queue.extend(prepared_items)
+        self.refresh()
+        self.set_status(f"Added {len(prepared_items)} item(s) to queue")
+        return len(prepared_items)
 
     def refresh(self):
         """Rebuild the Treeview from session.measurement_queue."""
@@ -1014,7 +1028,7 @@ class QueueTab:
             if action_name != "COMPRESS_SEND":
                 return None
             mode = str(params.get("folder_mode") or "current_experiment").strip().lower()
-            if mode not in {"current_experiment", "specific_folder"}:
+            if mode not in {"current_experiment", "current_session", "specific_folder"}:
                 return None
             if mode == "specific_folder":
                 folder_path = str(params.get("folder_path") or "").strip()
@@ -1025,7 +1039,11 @@ class QueueTab:
             item["details"] = details or (
                 f"Compress + send folder: {params.get('folder_path')}"
                 if mode == "specific_folder"
-                else "Compress + send current experiment folder"
+                else (
+                    "Compress + send current session folder"
+                    if mode == "current_session"
+                    else "Compress + send current experiment folder"
+                )
             )
         else:
             sp = raw.get("script_path")
@@ -2345,8 +2363,16 @@ class QueueTab:
             return False
 
         mode = str(params.get("folder_mode") or "current_experiment").strip().lower()
-        if mode == "current_experiment":
-            session_mgr = getattr(self._session, "session_manager", None)
+        if mode == "current_session":
+            session_path = getattr(session_mgr, "current_session_path", None) if session_mgr else None
+            if session_path is None:
+                self.log("Compress+Send failed: no current session folder is active.")
+                if session_mgr is not None:
+                    session_mgr.notify_slack("Compress+Send failed: no current session folder is active.")
+                return False
+            source_path = Path(session_path)
+            self.log(f"Compress+Send source -> active session folder: {source_path}")
+        elif mode == "current_experiment":
             experiment_path = getattr(session_mgr, "current_experiment_path", None) if session_mgr else None
             session_path = getattr(session_mgr, "current_session_path", None) if session_mgr else None
             source = experiment_path or session_path
