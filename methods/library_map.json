@@ -1483,5 +1483,575 @@
     "note": "swv -.7 to -.1 freq=400Hz",
     "added_at": "2026-04-08T10:59:10",
     "filepath": "methods\\library\\swv_39a07b.ms"
+  },
+  "swv_ch1_1e5886": {
+    "technique": "SWV",
+    "mux_channel": 1,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 1",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch1_1e5886.ms"
+  },
+  "swv_ch2_c186f4": {
+    "technique": "SWV",
+    "mux_channel": 2,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 2",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch2_c186f4.ms"
+  },
+  "swv_ch3_99cac3": {
+    "technique": "SWV",
+    "mux_channel": 3,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 3",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch3_99cac3.ms"
+  },
+  "swv_ch4_0cec68": {
+    "technique": "SWV",
+    "mux_channel": 4,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 4",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch4_0cec68.ms"
+  },
+  "swv_ch5_942f7b": {
+    "technique": "SWV",
+    "mux_channel": 5,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 5",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch5_942f7b.ms"
+  },
+  "swv_ch6_2bf7f9": {
+    "technique": "SWV",
+    "mux_channel": 6,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 6",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch6_2bf7f9.ms"
+  },
+  "swv_ch7_6e8fa5": {
+    "technique": "SWV",
+    "mux_channel": 7,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 7",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch7_6e8fa5.ms"
+  },
+  "swv_ch8_27144a": {
+    "technique": "SWV",
+    "mux_channel": 8,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 8",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch8_27144a.ms"
+  },
+  "swv_ch9_12735e": {
+    "technique": "SWV",
+    "mux_channel": 9,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 9",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch9_12735e.ms"
+  },
+  "swv_ch10_16a8fb": {
+    "technique": "SWV",
+    "mux_channel": 10,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "50",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=50Hz | MUX ch 10",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch10_16a8fb.ms"
+  },
+  "swv_ch1_4cd392": {
+    "technique": "SWV",
+    "mux_channel": 1,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 1",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch1_4cd392.ms"
+  },
+  "swv_ch2_814089": {
+    "technique": "SWV",
+    "mux_channel": 2,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 2",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch2_814089.ms"
+  },
+  "swv_ch3_217de7": {
+    "technique": "SWV",
+    "mux_channel": 3,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 3",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch3_217de7.ms"
+  },
+  "swv_ch4_d2cf7a": {
+    "technique": "SWV",
+    "mux_channel": 4,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 4",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch4_d2cf7a.ms"
+  },
+  "swv_ch5_a280c8": {
+    "technique": "SWV",
+    "mux_channel": 5,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 5",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch5_a280c8.ms"
+  },
+  "swv_ch6_01fa33": {
+    "technique": "SWV",
+    "mux_channel": 6,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 6",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch6_01fa33.ms"
+  },
+  "swv_ch7_ce60b5": {
+    "technique": "SWV",
+    "mux_channel": 7,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 7",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch7_ce60b5.ms"
+  },
+  "swv_ch8_d0f4cb": {
+    "technique": "SWV",
+    "mux_channel": 8,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 8",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch8_d0f4cb.ms"
+  },
+  "swv_ch9_5b0d6c": {
+    "technique": "SWV",
+    "mux_channel": 9,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 9",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch9_5b0d6c.ms"
+  },
+  "swv_ch10_ca68df": {
+    "technique": "SWV",
+    "mux_channel": 10,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "100",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=100Hz | MUX ch 10",
+    "added_at": "2026-04-08T13:15:58",
+    "filepath": "methods\\library\\mux_methods\\swv_ch10_ca68df.ms"
+  },
+  "swv_ch1_ba7446": {
+    "technique": "SWV",
+    "mux_channel": 1,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 1",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch1_ba7446.ms"
+  },
+  "swv_ch2_fb046e": {
+    "technique": "SWV",
+    "mux_channel": 2,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 2",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch2_fb046e.ms"
+  },
+  "swv_ch3_5a2f41": {
+    "technique": "SWV",
+    "mux_channel": 3,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 3",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch3_5a2f41.ms"
+  },
+  "swv_ch4_5099b0": {
+    "technique": "SWV",
+    "mux_channel": 4,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 4",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch4_5099b0.ms"
+  },
+  "swv_ch5_c26387": {
+    "technique": "SWV",
+    "mux_channel": 5,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 5",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch5_c26387.ms"
+  },
+  "swv_ch6_bd8846": {
+    "technique": "SWV",
+    "mux_channel": 6,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 6",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch6_bd8846.ms"
+  },
+  "swv_ch7_d40160": {
+    "technique": "SWV",
+    "mux_channel": 7,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 7",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch7_d40160.ms"
+  },
+  "swv_ch8_83ff85": {
+    "technique": "SWV",
+    "mux_channel": 8,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 8",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch8_83ff85.ms"
+  },
+  "swv_ch9_438dd6": {
+    "technique": "SWV",
+    "mux_channel": 9,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 9",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch9_438dd6.ms"
+  },
+  "swv_ch10_47e941": {
+    "technique": "SWV",
+    "mux_channel": 10,
+    "params": {
+      "begin_potential": "-0.7",
+      "end_potential": "-0.1",
+      "step_potential": "0.002",
+      "amplitude": "0.036",
+      "frequency": "400",
+      "n_scans": "1",
+      "cycle_delay": "0",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "swv -.7 to -.1 freq=400Hz | MUX ch 10",
+    "added_at": "2026-04-08T13:15:59",
+    "filepath": "methods\\library\\mux_methods\\swv_ch10_47e941.ms"
   }
 }
