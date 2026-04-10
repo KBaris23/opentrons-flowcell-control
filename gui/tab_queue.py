@@ -1585,6 +1585,7 @@ class QueueTab:
                             data_folder = self._session.session_manager.require_experiment()
                             if data_folder is None:
                                 self._session.measurement_queue[i]["status"] = "failed"
+                                self._log_queue_item_outcome(i, item)
                                 self._root.after(0, self.refresh)
                                 break
                         runner = SerialMeasurementRunner(
@@ -1611,6 +1612,7 @@ class QueueTab:
                 self._session.measurement_queue[i]["status"] = "failed"
                 self.log(f"CRITICAL ERROR in queue: {exc}")
 
+            self._log_queue_item_outcome(i, item)
             if csv_path:
                 self._root.after(0, self._plotter.plot_data, csv_path,
                                  self._session.last_live_plot_color, None, True, False)
@@ -1622,7 +1624,7 @@ class QueueTab:
 
         self._session.is_running = False
         self._preconfirmed_opentrons_indices.clear()
-        self.log("Queue completed.")
+        self.log("Queue execution loop finished.")
         self._root.after(0, self.set_status, "Queue Complete")
         self._announce_queue_end(start_index=start_index)
 
@@ -1646,12 +1648,25 @@ class QueueTab:
             f"Session={session_name}; Experiment={experiment_name}."
         )
         try:
+            session_mgr.log(msg)
+        except Exception:
+            self.log(msg)
+        try:
             session_mgr.notify_slack(msg)
         except Exception:
-            try:
-                session_mgr.log(msg)
-            except Exception:
-                self.log(msg)
+            pass
+
+    @staticmethod
+    def _queue_item_label(item: dict) -> str:
+        return str(item.get("details") or item.get("type") or "(unknown item)")
+
+    def _log_queue_item_outcome(self, index: int, item: dict) -> None:
+        status = str(((self._session.measurement_queue[index] or {}).get("status") or "")).strip().lower()
+        if status not in {"failed", "paused", "stopped"}:
+            return
+        label = self._queue_item_label(item)
+        prefix = status.upper()
+        self.log(f"Queue {prefix} -> row {index + 1}: {label}")
 
     def _announce_queue_end(self, start_index: int):
         session_mgr = getattr(self._session, "session_manager", None)
@@ -1700,12 +1715,13 @@ class QueueTab:
             f"Session={session_name}; Experiment={experiment_name}."
         )
         try:
+            session_mgr.log(msg)
+        except Exception:
+            self.log(msg)
+        try:
             session_mgr.notify_slack(msg)
         except Exception:
-            try:
-                session_mgr.log(msg)
-            except Exception:
-                self.log(msg)
+            pass
 
     def _ensure_mux_script_for_item(self, item: dict):
         """Auto-correct script_path to requested MUX channel before execution."""

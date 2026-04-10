@@ -549,7 +549,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -568,7 +568,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -587,7 +587,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -606,7 +606,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -625,7 +625,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -644,7 +644,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -663,7 +663,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -682,7 +682,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -701,7 +701,7 @@
         },
         {
           "dest_alias": "dilute",
-          "dest_well": "A2",
+          "dest_well": "B2",
           "kind": "transfer",
           "location": "bottom",
           "new_tip": "always",
@@ -718,6 +718,8 @@
     },
     "note": "Titration_Kana_10_steps",
     "added_at": "2026-04-01T18:02:49",
-    "filepath": "opentrons_protocols\\library\\Titration_Kana_10_steps.py"
+    "filepath": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Kana_10_steps.py",
+    "updated_at": "2026-04-09T11:56:00",
+    "protocol_id": "otproto_15e794fb5f7f78f8"
   }
 }
