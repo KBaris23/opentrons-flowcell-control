@@ -23,6 +23,16 @@ from config import DEVICE_KEYWORDS, CHEMYX_DEFAULT_PORT
 from core.session import SessionState
 from gui.tab_custom_script import CustomScriptPanel
 
+LOW_SPEED_BA_RANGES = (
+    "100n", "1.95u", "3.91u", "7.81u", "15.63u", "31.25u",
+    "62.5u", "125u", "250u", "500u", "1m", "5m",
+)
+
+HIGH_SPEED_BA_RANGES = (
+    "100n", "1u", "6.25u", "12.5u", "25u",
+    "50u", "100u", "200u", "1m", "5m",
+)
+
 class MethodTab:
     """Manages the 'Method Creation' notebook tab.
 
@@ -63,6 +73,7 @@ class MethodTab:
 
         self.current_technique = "CV"
         self.cv_params:  dict  = {}
+        self.lsv_params: dict  = {}
         self.swv_params: dict  = {}
         self.pause_params: dict = {}
         self._library_note = tk.StringVar(value="")
@@ -83,6 +94,8 @@ class MethodTab:
         tech_frame.pack(pady=10)
         ttk.Button(tech_frame, text="Cyclic Voltammetry (CV)",
                    command=self._show_cv_params, width=28).pack(pady=5)
+        ttk.Button(tech_frame, text="Linear Sweep Voltammetry (LSV)",
+                   command=self._show_lsv_params, width=28).pack(pady=5)
         ttk.Button(tech_frame, text="Square Wave Voltammetry (SWV)",
            command=self._show_swv_params, width=28).pack(pady=5)
         ttk.Button(tech_frame, text="Custom Script (File)",
@@ -246,6 +259,98 @@ class MethodTab:
         for w in self._params_frame.winfo_children():
             w.destroy()
 
+    @staticmethod
+    def _ba_ranges_for(technique: str):
+        return HIGH_SPEED_BA_RANGES if technique == "SWV" else LOW_SPEED_BA_RANGES
+
+    def _default_current_range_state(self, technique: str):
+        ranges = self._ba_ranges_for(technique)
+        if technique == "SWV":
+            return {
+                "mode": "fixed",
+                "fixed": ranges[0],
+                "autorange_min": ranges[0],
+                "autorange_max": ranges[0],
+            }
+        return {
+            "mode": "autorange",
+            "fixed": ranges[7],
+            "autorange_min": ranges[0],
+            "autorange_max": ranges[7],
+        }
+
+    def _add_current_range_controls(self, row: int, technique: str, params: dict):
+        ranges = self._ba_ranges_for(technique)
+        defaults = self._default_current_range_state(technique)
+
+        frame = ttk.LabelFrame(
+            self._params_frame,
+            text="Current Range (EmStat Pico BA)",
+            padding=8,
+        )
+        frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        frame.columnconfigure(1, weight=1)
+
+        mode_var = tk.StringVar(value=defaults["mode"])
+        fixed_var = tk.StringVar(value=defaults["fixed"])
+        auto_min_var = tk.StringVar(value=defaults["autorange_min"])
+        auto_max_var = tk.StringVar(value=defaults["autorange_max"])
+
+        ttk.Label(frame, text="Mode:").grid(row=0, column=0, sticky="w", pady=2)
+        mode_frame = ttk.Frame(frame)
+        mode_frame.grid(row=0, column=1, columnspan=2, sticky="w", pady=2)
+        ttk.Radiobutton(
+            mode_frame, text="Autorange", value="autorange", variable=mode_var
+        ).pack(side="left", padx=(0, 10))
+        ttk.Radiobutton(
+            mode_frame, text="Fixed", value="fixed", variable=mode_var
+        ).pack(side="left")
+
+        ttk.Label(frame, text="Fixed range:").grid(row=1, column=0, sticky="w", pady=2)
+        fixed_box = ttk.Combobox(
+            frame,
+            textvariable=fixed_var,
+            values=ranges,
+            state="readonly",
+            width=12,
+        )
+        fixed_box.grid(row=1, column=1, sticky="w", pady=2)
+
+        ttk.Label(frame, text="Autorange min:").grid(row=2, column=0, sticky="w", pady=2)
+        auto_min_box = ttk.Combobox(
+            frame,
+            textvariable=auto_min_var,
+            values=ranges,
+            state="readonly",
+            width=12,
+        )
+        auto_min_box.grid(row=2, column=1, sticky="w", pady=2)
+
+        ttk.Label(frame, text="Autorange max:").grid(row=3, column=0, sticky="w", pady=2)
+        auto_max_box = ttk.Combobox(
+            frame,
+            textvariable=auto_max_var,
+            values=ranges,
+            state="readonly",
+            width=12,
+        )
+        auto_max_box.grid(row=3, column=1, sticky="w", pady=2)
+
+        def _sync_mode(*_args):
+            fixed_state = "readonly" if mode_var.get() == "fixed" else "disabled"
+            auto_state = "disabled" if mode_var.get() == "fixed" else "readonly"
+            fixed_box.configure(state=fixed_state)
+            auto_min_box.configure(state=auto_state)
+            auto_max_box.configure(state=auto_state)
+
+        mode_var.trace_add("write", _sync_mode)
+        _sync_mode()
+
+        params["current_range_mode"] = mode_var
+        params["current_range_fixed"] = fixed_var
+        params["current_range_autorange_min"] = auto_min_var
+        params["current_range_autorange_max"] = auto_max_var
+
     def _show_cv_params(self):
         self._clear_params()
         self.current_technique = "CV"
@@ -269,19 +374,58 @@ class MethodTab:
             entry.grid(row=i, column=1, pady=2)
             self.cv_params[key] = entry
 
+        self._add_current_range_controls(len(params), "CV", self.cv_params)
+
         ttk.Label(self._params_frame, text="Library note (optional):").grid(
-            row=len(params), column=0, sticky="w", pady=2)
+            row=len(params) + 1, column=0, sticky="w", pady=2)
         ttk.Entry(self._params_frame, width=40, textvariable=self._library_note).grid(
-            row=len(params), column=1, sticky="w", pady=2)
+            row=len(params) + 1, column=1, sticky="w", pady=2)
 
         btn_frame = ttk.Frame(self._params_frame)
-        btn_frame.grid(row=len(params) + 1, column=0, columnspan=2, pady=20)
+        btn_frame.grid(row=len(params) + 2, column=0, columnspan=2, pady=20)
         ttk.Button(btn_frame, text="Generate Script",
                    command=self._generate_cv_script).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Run Now",
                    command=self._run_cv_now).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Add to Queue",
                    command=self._add_cv_to_queue).pack(side="left", padx=5)
+
+    def _show_lsv_params(self):
+        self._clear_params()
+        self.current_technique = "LSV"
+        self.lsv_params = {}
+        params = [
+            ("Begin Potential (V):",                "begin_potential", "0"),
+            ("End Potential (V):",                  "end_potential",   "0.5"),
+            ("Step Potential (V):",                 "step_potential",  "0.002"),
+            ("Scan Rate (V/s):",                    "scan_rate",       "0.1"),
+            ("Conditioning Potential (V):",         "cond_potential",  "0"),
+            ("Conditioning Time (s):",              "cond_time",       "0"),
+            ("MUX16 Channels (1-16, 0=off):",       "mux_channel",     "0"),
+        ]
+        for i, (label, key, default) in enumerate(params):
+            ttk.Label(self._params_frame, text=label).grid(
+                row=i, column=0, sticky="w", pady=2)
+            entry = ttk.Entry(self._params_frame, width=15)
+            entry.insert(0, default)
+            entry.grid(row=i, column=1, pady=2)
+            self.lsv_params[key] = entry
+
+        self._add_current_range_controls(len(params), "LSV", self.lsv_params)
+
+        ttk.Label(self._params_frame, text="Library note (optional):").grid(
+            row=len(params) + 1, column=0, sticky="w", pady=2)
+        ttk.Entry(self._params_frame, width=40, textvariable=self._library_note).grid(
+            row=len(params) + 1, column=1, sticky="w", pady=2)
+
+        btn_frame = ttk.Frame(self._params_frame)
+        btn_frame.grid(row=len(params) + 2, column=0, columnspan=2, pady=20)
+        ttk.Button(btn_frame, text="Generate Script",
+                   command=self._generate_lsv_script).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Run Now",
+                   command=self._run_lsv_now).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Add to Queue",
+                   command=self._add_lsv_to_queue).pack(side="left", padx=5)
 
     def _show_swv_params(self):
         self._clear_params()
@@ -307,13 +451,15 @@ class MethodTab:
             entry.grid(row=i, column=1, pady=2)
             self.swv_params[key] = entry
 
+        self._add_current_range_controls(len(params), "SWV", self.swv_params)
+
         ttk.Label(self._params_frame, text="Library note (optional):").grid(
-            row=len(params), column=0, sticky="w", pady=2)
+            row=len(params) + 1, column=0, sticky="w", pady=2)
         ttk.Entry(self._params_frame, width=40, textvariable=self._library_note).grid(
-            row=len(params), column=1, sticky="w", pady=2)
+            row=len(params) + 1, column=1, sticky="w", pady=2)
 
         btn_frame = ttk.Frame(self._params_frame)
-        btn_frame.grid(row=len(params) + 1, column=0, columnspan=2, pady=20)
+        btn_frame.grid(row=len(params) + 2, column=0, columnspan=2, pady=20)
         ttk.Button(btn_frame, text="Generate Script",
                    command=self._generate_swv_script).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Run Now",
@@ -351,6 +497,55 @@ class MethodTab:
 
     # ── Script generation ─────────────────────────────────────────────────────
 
+    @staticmethod
+    def _raw_param_values(params: dict):
+        raw = {}
+        for key, widget_or_var in params.items():
+            if hasattr(widget_or_var, "get"):
+                raw[key] = widget_or_var.get()
+        return raw
+
+    def _get_current_range_settings(self, params: dict, technique: str):
+        ranges = self._ba_ranges_for(technique)
+        by_index = {value: idx for idx, value in enumerate(ranges)}
+
+        mode = (params["current_range_mode"].get() or "autorange").strip().lower()
+        fixed = (params["current_range_fixed"].get() or "").strip()
+        auto_min = (params["current_range_autorange_min"].get() or "").strip()
+        auto_max = (params["current_range_autorange_max"].get() or "").strip()
+
+        if mode not in {"fixed", "autorange"}:
+            raise ValueError("Current range mode must be Fixed or Autorange.")
+        if fixed not in by_index:
+            raise ValueError(f"Invalid fixed current range: {fixed}")
+        if auto_min not in by_index:
+            raise ValueError(f"Invalid autorange minimum: {auto_min}")
+        if auto_max not in by_index:
+            raise ValueError(f"Invalid autorange maximum: {auto_max}")
+        if by_index[auto_min] > by_index[auto_max]:
+            raise ValueError("Autorange minimum cannot exceed autorange maximum.")
+
+        return {
+            "mode": mode,
+            "fixed": fixed,
+            "autorange_min": auto_min,
+            "autorange_max": auto_max,
+        }
+
+    def _current_range_commands(self, params: dict, technique: str):
+        settings = self._get_current_range_settings(params, technique)
+        if settings["mode"] == "fixed":
+            selected = settings["fixed"]
+            return [
+                f"set_range ba {selected}",
+                f"set_autoranging ba {selected} {selected}",
+            ]
+        max_range = settings["autorange_max"]
+        return [
+            f"set_range ba {max_range}",
+            f"set_autoranging ba {settings['autorange_min']} {max_range}",
+        ]
+
     def _build_cv_script(self) -> str:
         p = self.cv_params
         begin      = to_si_string(p["begin_potential"].get(), "V")
@@ -365,8 +560,8 @@ class MethodTab:
         parts = [
             "e", "var c", "var p",
             "set_pgstat_mode 2", "set_max_bandwidth 40",
-            "set_range ba 100u", "set_autoranging ba 1n 100u",
         ]
+        parts += self._current_range_commands(p, "CV")
         if float(cond_time) > 0:
             parts += [f"set_e {cond_pot}", "cell_on",
                       f"# Condition for {cond_time}s", f"wait {cond_time}"]
@@ -379,6 +574,34 @@ class MethodTab:
         parts += ["# CV measurement loop", cv_cmd,
                   "\tpck_start", "\tpck_add p", "\tpck_add c", "\tpck_end",
                   "endloop", "on_finished:", "cell_off"]
+        return "\n".join(parts)
+
+    def _build_lsv_script(self) -> str:
+        p = self.lsv_params
+        begin      = to_si_string(p["begin_potential"].get(), "V")
+        end        = to_si_string(p["end_potential"].get(),   "V")
+        step       = to_si_string(p["step_potential"].get(),  "V")
+        scan_rate  = to_si_string(p["scan_rate"].get(),       "V/s")
+        cond_pot   = to_si_string(p["cond_potential"].get(),  "V")
+        cond_time  = p["cond_time"].get()
+
+        parts = [
+            "e", "var c", "var p",
+            "set_pgstat_mode 2", "set_max_bandwidth 40",
+        ]
+        parts += self._current_range_commands(p, "LSV")
+        if float(cond_time) > 0:
+            parts += [f"set_e {cond_pot}", "cell_on",
+                      f"# Condition for {cond_time}s", f"wait {cond_time}"]
+        else:
+            parts += [f"set_e {begin}", "cell_on"]
+
+        parts += [
+            "# LSV measurement loop",
+            f"meas_loop_lsv p c {begin} {end} {step} {scan_rate}",
+            "\tpck_start", "\tpck_add p", "\tpck_add c", "\tpck_end",
+            "endloop", "on_finished:", "cell_off",
+        ]
         return "\n".join(parts)
 
     def _build_swv_script(self) -> str:
@@ -406,8 +629,9 @@ class MethodTab:
             "set_pgstat_mode 3",
             "set_max_bandwidth 4k",
             f"set_range_minmax da {min_mv}m {max_mv}m",
-            "set_range ba 59n", "set_autoranging ba 59n 59n", "cell_on",
         ]
+        parts += self._current_range_commands(p, "SWV")
+        parts += ["cell_on"]
         if float(cond_time) > 0:
             parts += [f"# Equilibrate at {cond_pot} for {cond_time}s",
                       f"set_e {cond_pot}", f"wait {cond_time}"]
@@ -516,6 +740,23 @@ class MethodTab:
         except Exception as exc:
             messagebox.showerror("Error", f"Failed to generate script: {exc}")
 
+    def _generate_lsv_script(self):
+        try:
+            base   = self._build_lsv_script()
+            mux    = self._get_mux_channels(self.lsv_params)
+            if mux is None:
+                return
+            script = base
+            if mux:
+                script = self._wrap_mux(base, mux[0])
+                if len(mux) > 1:
+                    script = (f"# NOTE: Multiple channels selected "
+                               f"({', '.join(map(str, mux))}). "
+                               f"Preview shows ch {mux[0]}.\n") + script
+            self._script_preview(script)
+        except Exception as exc:
+            messagebox.showerror("Error", f"Failed to generate script: {exc}")
+
     def _generate_swv_script(self):
         try:
             base   = self._build_swv_script()
@@ -557,7 +798,7 @@ class MethodTab:
         if mux is None:
             return
         # Extract raw string values for hashing
-        raw_params = {k: v.get() for k, v in self.cv_params.items()}
+        raw_params = self._raw_param_values(self.cv_params)
         note = (self._library_note.get() or "").strip()
         if mux:
             for ch in mux:
@@ -566,6 +807,25 @@ class MethodTab:
         else:
             self._add_one("CV", base, raw_params, note=note)
             messagebox.showinfo("Success", "CV added to queue")
+        self._refresh_queue()
+
+    def _add_lsv_to_queue(self):
+        try:
+            base = self._build_lsv_script()
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc)); return
+        mux = self._get_mux_channels(self.lsv_params)
+        if mux is None:
+            return
+        raw_params = self._raw_param_values(self.lsv_params)
+        note = (self._library_note.get() or "").strip()
+        if mux:
+            for ch in mux:
+                self._add_one("LSV", self._wrap_mux(base, ch), raw_params, mux_channel=ch, note=note)
+            messagebox.showinfo("Success", f"LSV added for MUX channels: {', '.join(map(str, mux))}")
+        else:
+            self._add_one("LSV", base, raw_params, note=note)
+            messagebox.showinfo("Success", "LSV added to queue")
         self._refresh_queue()
 
     def _add_swv_to_queue(self):
@@ -579,7 +839,7 @@ class MethodTab:
         n_scans, delay = self._get_swv_cycles_and_delay()
         if n_scans is None:
             return
-        raw_params = {k: v.get() for k, v in self.swv_params.items()}
+        raw_params = self._raw_param_values(self.swv_params)
         note = (self._library_note.get() or "").strip()
 
         added = []
@@ -659,6 +919,22 @@ class MethodTab:
                 self._run_now("CV_MUX_SEQ", base, mux)
         else:
             self._run_now("CV", base, None)
+
+    def _run_lsv_now(self):
+        try:
+            base = self._build_lsv_script()
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc)); return
+        mux = self._get_mux_channels(self.lsv_params)
+        if mux is None:
+            return
+        if mux:
+            if len(mux) == 1:
+                self._run_now("LSV", self._wrap_mux(base, mux[0]), mux[0])
+            else:
+                self._run_now("LSV_MUX_SEQ", base, mux)
+        else:
+            self._run_now("LSV", base, None)
 
     def _run_swv_now(self):
         try:
