@@ -29,7 +29,6 @@ Usage (called from MethodTab._show_custom_params)
 """
 
 from pathlib import Path
-import hashlib
 import re
 from typing import Optional
 from tkinter import filedialog, messagebox
@@ -37,6 +36,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.session import SessionState
+from core.methodscript_compat import normalize_method_params, normalized_script_hash
 
 
 class CustomScriptPanel:
@@ -339,6 +339,9 @@ class CustomScriptPanel:
             return
 
         base_script = self.script_text
+        detected_technique, detected_params = self._extract_params(base_script)
+        base_params = normalize_method_params(detected_params or {"custom_hash": normalized_script_hash(base_script)})
+        save_technique = detected_technique or "Custom"
 
         if channels:
             if not self._confirm_mux_override():
@@ -346,11 +349,11 @@ class CustomScriptPanel:
             base_script = self._strip_mux_header(base_script)
             if len(channels) == 1:
                 mux_script = self._wrap_mux(base_script, channels[0])
-                self._run_now_cb("Custom", mux_script, channels[0])
+                self._run_now_cb(save_technique, mux_script, {"mux_channel": channels[0], "params": base_params})
             else:
-                self._run_now_cb("CV_MUX_SEQ", base_script, channels)
+                self._run_now_cb(f"{save_technique}_MUX_SEQ", base_script, {"channels": channels, "params": base_params})
         else:
-            self._run_now_cb("Custom", self.script_text, None)
+            self._run_now_cb(save_technique, self.script_text, {"mux_channel": None, "params": base_params})
 
     # ── Add to Queue ───────────────────────────────────────────────────────────
 
@@ -373,8 +376,9 @@ class CustomScriptPanel:
         base_script = self.script_text
         note = (getattr(self, "_note_var", None).get() or "").strip()
         detected_technique, detected_params = self._extract_params(base_script)
-        script_hash = hashlib.sha1(base_script.encode("utf-8")).hexdigest()[:12]
-        base_params = detected_params or {"custom_hash": script_hash}
+        base_params = normalize_method_params(
+            detected_params or {"custom_hash": normalized_script_hash(base_script)}
+        )
         save_technique = detected_technique or "Custom"
 
         if channels:

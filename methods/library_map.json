@@ -2053,5 +2053,23 @@
     "note": "swv -.7 to -.1 freq=400Hz | MUX ch 10",
     "added_at": "2026-04-08T13:15:59",
     "filepath": "methods\\library\\mux_methods\\swv_ch10_47e941.ms"
+  },
+  "cv_7bc349": {
+    "technique": "CV",
+    "mux_channel": 0,
+    "params": {
+      "begin_potential": "-1.0",
+      "vertex1": "1.0",
+      "vertex2": "-1.0",
+      "step_potential": "0.002",
+      "scan_rate": "0.1",
+      "n_scans": "3",
+      "cond_potential": "0",
+      "cond_time": "0",
+      "mux_channel": "0"
+    },
+    "note": "test_cv",
+    "added_at": "2026-04-10T15:02:28",
+    "filepath": "methods\\library\\cv_7bc349.ms"
   }
 }

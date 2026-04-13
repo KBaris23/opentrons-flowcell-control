@@ -18,20 +18,14 @@ from tkinter import ttk
 import serial.tools.list_ports
 
 from core.mscript_parser import to_si_string
+from core.methodscript_compat import SUPPORTED_BA_LABELS, normalize_current_range_label, normalize_method_params
 from core.runner import format_port_info
 from config import DEVICE_KEYWORDS, CHEMYX_DEFAULT_PORT
 from core.session import SessionState
 from gui.tab_custom_script import CustomScriptPanel
 
-LOW_SPEED_BA_RANGES = (
-    "100n", "1.95u", "3.91u", "7.81u", "15.63u", "31.25u",
-    "62.5u", "125u", "250u", "500u", "1m", "5m",
-)
-
-HIGH_SPEED_BA_RANGES = (
-    "100n", "1u", "6.25u", "12.5u", "25u",
-    "50u", "100u", "200u", "1m", "5m",
-)
+LOW_SPEED_BA_RANGES = SUPPORTED_BA_LABELS
+HIGH_SPEED_BA_RANGES = SUPPORTED_BA_LABELS
 
 class MethodTab:
     """Manages the 'Method Creation' notebook tab.
@@ -274,9 +268,9 @@ class MethodTab:
             }
         return {
             "mode": "autorange",
-            "fixed": ranges[7],
+            "fixed": ranges[-2],
             "autorange_min": ranges[0],
-            "autorange_max": ranges[7],
+            "autorange_max": ranges[-2],
         }
 
     def _add_current_range_controls(self, row: int, technique: str, params: dict):
@@ -503,16 +497,22 @@ class MethodTab:
         for key, widget_or_var in params.items():
             if hasattr(widget_or_var, "get"):
                 raw[key] = widget_or_var.get()
-        return raw
+        return normalize_method_params(raw)
 
     def _get_current_range_settings(self, params: dict, technique: str):
         ranges = self._ba_ranges_for(technique)
         by_index = {value: idx for idx, value in enumerate(ranges)}
 
         mode = (params["current_range_mode"].get() or "autorange").strip().lower()
-        fixed = (params["current_range_fixed"].get() or "").strip()
-        auto_min = (params["current_range_autorange_min"].get() or "").strip()
-        auto_max = (params["current_range_autorange_max"].get() or "").strip()
+        fixed = normalize_current_range_label(params["current_range_fixed"].get(), role="fixed")
+        auto_min = normalize_current_range_label(
+            params["current_range_autorange_min"].get(),
+            role="autorange_min",
+        )
+        auto_max = normalize_current_range_label(
+            params["current_range_autorange_max"].get(),
+            role="autorange_max",
+        )
 
         if mode not in {"fixed", "autorange"}:
             raise ValueError("Current range mode must be Fixed or Autorange.")
@@ -633,8 +633,12 @@ class MethodTab:
         parts += self._current_range_commands(p, "SWV")
         parts += ["cell_on"]
         if float(cond_time) > 0:
-            parts += [f"# Equilibrate at {cond_pot} for {cond_time}s",
-                      f"set_e {cond_pot}", f"wait {cond_time}"]
+            parts += [
+                f"# Pre-equilibrate at {cond_pot} for {cond_time}s using CA",
+                f"set_e {cond_pot}",
+                f"meas_loop_ca p c {cond_pot} 200m {cond_time}",
+                "endloop",
+            ]
         parts += [f"set_e {begin}"]
         parts += [
             f"meas_loop_swv p c f r {begin} {end} {step} {amplitude} {frequency}",
@@ -913,12 +917,12 @@ class MethodTab:
             return
         if mux:
             if len(mux) == 1:
-                self._run_now("CV", self._wrap_mux(base, mux[0]), mux[0])
+                self._run_now("CV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": self._raw_param_values(self.cv_params)})
             else:
                 # Multi-channel: delegate to app for sequence run
-                self._run_now("CV_MUX_SEQ", base, mux)
+                self._run_now("CV_MUX_SEQ", base, {"channels": mux, "params": self._raw_param_values(self.cv_params)})
         else:
-            self._run_now("CV", base, None)
+            self._run_now("CV", base, {"mux_channel": None, "params": self._raw_param_values(self.cv_params)})
 
     def _run_lsv_now(self):
         try:
@@ -930,11 +934,11 @@ class MethodTab:
             return
         if mux:
             if len(mux) == 1:
-                self._run_now("LSV", self._wrap_mux(base, mux[0]), mux[0])
+                self._run_now("LSV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": self._raw_param_values(self.lsv_params)})
             else:
-                self._run_now("LSV_MUX_SEQ", base, mux)
+                self._run_now("LSV_MUX_SEQ", base, {"channels": mux, "params": self._raw_param_values(self.lsv_params)})
         else:
-            self._run_now("LSV", base, None)
+            self._run_now("LSV", base, {"mux_channel": None, "params": self._raw_param_values(self.lsv_params)})
 
     def _run_swv_now(self):
         try:
@@ -949,14 +953,14 @@ class MethodTab:
             return
         if mux:
             if len(mux) == 1 and n_scans == 1:
-                self._run_now("SWV", self._wrap_mux(base, mux[0]), mux[0])
+                self._run_now("SWV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": self._raw_param_values(self.swv_params)})
             else:
-                self._run_now("SWV_MUX_CYCLES", base, (mux, n_scans, delay))
+                self._run_now("SWV_MUX_CYCLES", base, {"channels": mux, "n_scans": n_scans, "delay": delay, "params": self._raw_param_values(self.swv_params)})
         else:
             if n_scans == 1:
-                self._run_now("SWV", base, None)
+                self._run_now("SWV", base, {"mux_channel": None, "params": self._raw_param_values(self.swv_params)})
             else:
-                self._run_now("SWV_CYCLES", base, (n_scans, delay))
+                self._run_now("SWV_CYCLES", base, {"n_scans": n_scans, "delay": delay, "params": self._raw_param_values(self.swv_params)})
 
     def _run_pause_now(self):
         try:
@@ -1006,10 +1010,6 @@ class MethodTab:
             "set_e -500m\n"
             "cell_on\n"
             "meas_loop_ca p c -500m 200m 1\n"
-            "  pck_start\n"
-            "    pck_add p\n"
-            "    pck_add c\n"
-            "  pck_end\n"
             "endloop\n"
             "meas_loop_swv p c f g -500m 0 2m 36m 100\n"
             "  pck_start\n"

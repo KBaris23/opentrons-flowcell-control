@@ -24,6 +24,7 @@ import serial
 import serial.tools.list_ports
 
 from .mscript_parser import parse_mscript_data_package
+from .methodscript_compat import validate_ba_tokens_in_script
 from config import DATA_DIR, DEVICE_KEYWORDS, DEVICE_BAUDRATE
 
 
@@ -190,6 +191,7 @@ class SerialMeasurementRunner:
             self.log("ERROR: Not connected to device")
             return False
         try:
+            validate_ba_tokens_in_script(script, self.script_path)
             self.log("Sending script to device...")
             for line in script.strip().split("\n"):
                 self.connection.write((line + "\n").encode("utf-8"))
@@ -266,7 +268,7 @@ class SerialMeasurementRunner:
                                 continue
                             self._parse_data_line(text_line)
 
-                        if text_line in ("*", "Measurement completed", "Script completed"):
+                        if text_line in ("Measurement completed", "Script completed"):
                             self.log("\nMeasurement completed")
                             measurement_completed = True
                             self.partial_packet = ""

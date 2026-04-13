@@ -6,13 +6,13 @@ Identical scripts (same technique + params + MUX channel) are stored once,
 identified by a short hash key.
 """
 
-import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
 from methods.library_map import compute_hash, lookup, register, update_note
 from config import METHODS_DIR, SAVE_DATED_METHOD_COPIES
+from core.methodscript_compat import normalize_method_params, normalized_script_hash
 
 
 class MethodRegistry:
@@ -49,7 +49,9 @@ class MethodRegistry:
         """
         if params is None:
             # Fall back to script-content hashing for ad-hoc scripts.
-            params = {"_script_hash": hashlib.sha1(script.encode("utf-8")).hexdigest()[:12]}
+            params = {"_script_hash": normalized_script_hash(script)}
+        else:
+            params = normalize_method_params(params)
         key = self._make_key(technique, params, mux_channel)
 
         # Level 1: session cache
