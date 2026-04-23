@@ -4,8 +4,29 @@ from pathlib import Path
 from typing import Optional
 
 
-SUPPORTED_BA_LABELS = ("59n", "489n", "10u", "100u", "1m", "5m")
-VALID_BA_TOKENS = set(SUPPORTED_BA_LABELS) | {"2u", "59m"}
+DISPLAY_CURRENT_RANGE_TO_TOKEN = {
+    "100 nA": "59n",
+    "1 uA": "590n",
+    "2 uA": "1180n",
+    "4 uA": "2360n",
+    "6 uA": "3687500p",
+    "8 uA": "4720n",
+    "13 uA": "7375n",
+    "16 uA": "9440n",
+    "25 uA": "14750n",
+    "32 uA": "18880n",
+    "50 uA": "29500n",
+    "63 uA": "37170n",
+    "100 uA": "59u",
+    "125 uA": "73750n",
+    "200 uA": "118u",
+    "250 uA": "147500n",
+    "500 uA": "295u",
+    "1 mA": "590u",
+    "5 mA": "2950u",
+}
+SUPPORTED_BA_LABELS = tuple(DISPLAY_CURRENT_RANGE_TO_TOKEN.values())
+VALID_BA_TOKENS = set(SUPPORTED_BA_LABELS) | {"489n", "10u", "100u", "2u", "59m"}
 
 _CURRENT_FACTORS = {
     "a": 1e-18,
@@ -43,14 +64,20 @@ def _parse_current_value(label: object) -> Optional[float]:
 
 def normalize_current_range_label(label: object, role: str = "fixed") -> str:
     text = str(label or "").strip().replace(" ", "")
-    if text in SUPPORTED_BA_LABELS:
+    if text in VALID_BA_TOKENS:
         return text
+    pretty = str(label or "").strip()
+    if pretty in DISPLAY_CURRENT_RANGE_TO_TOKEN:
+        return DISPLAY_CURRENT_RANGE_TO_TOKEN[pretty]
 
     requested = _parse_current_value(text)
     if requested is None:
         raise ValueError(f"Unsupported BA/current-range value: {label}")
 
     supported = [(item, _parse_current_value(item)) for item in SUPPORTED_BA_LABELS]
+    if role == "fixed":
+        choices = [item for item in supported if item[1] >= requested]
+        return (choices[0] if choices else supported[-1])[0]
     if role == "autorange_min":
         choices = [item for item in supported if item[1] <= requested]
         return (choices[-1] if choices else supported[0])[0]

@@ -27,6 +27,7 @@ class SessionBar:
 
         self._experiment_name_var = tk.StringVar()
         self._experiment_chip_id_var = tk.StringVar()
+        self._experiment_aptamer_type_var = tk.StringVar()
         self._experiment_notes_var = tk.StringVar()
 
         self._build()
@@ -81,6 +82,7 @@ class SessionBar:
         exp = ttk.LabelFrame(row, text="Experiment")
         exp.pack(side="right", fill="x", expand=True, padx=(4, 0))
         exp.columnconfigure(1, weight=1)
+        exp.columnconfigure(3, weight=1)
 
         ttk.Label(exp, text="Experiment Name:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
         ttk.Entry(exp, textvariable=self._experiment_name_var, width=22).grid(
@@ -88,17 +90,22 @@ class SessionBar:
         )
 
         ttk.Label(exp, text="Chip ID:").grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        ttk.Entry(exp, textvariable=self._experiment_chip_id_var, width=26).grid(
+        ttk.Entry(exp, textvariable=self._experiment_chip_id_var, width=16).grid(
             row=1, column=1, sticky="we", padx=5, pady=2
+        )
+
+        ttk.Label(exp, text="Aptamer Type:").grid(row=1, column=2, sticky="w", padx=5, pady=2)
+        ttk.Entry(exp, textvariable=self._experiment_aptamer_type_var, width=16).grid(
+            row=1, column=3, sticky="we", padx=5, pady=2
         )
 
         ttk.Label(exp, text="Notes:").grid(row=2, column=0, sticky="w", padx=5, pady=2)
         ttk.Entry(exp, textvariable=self._experiment_notes_var, width=26).grid(
-            row=2, column=1, sticky="we", padx=5, pady=2
+            row=2, column=1, columnspan=3, sticky="we", padx=5, pady=2
         )
 
         btn_row = ttk.Frame(exp)
-        btn_row.grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=2)
+        btn_row.grid(row=3, column=0, columnspan=4, sticky="w", padx=5, pady=2)
         ttk.Button(btn_row, text="Start Experiment", command=self._on_start_experiment).pack(
             side="left", padx=(0, 4)
         )
@@ -151,6 +158,7 @@ class SessionBar:
         started = self._mgr.start_experiment(
             name=self._experiment_name_var.get(),
             chip_id=self._experiment_chip_id_var.get(),
+            aptamer_type=self._experiment_aptamer_type_var.get(),
             notes=self._experiment_notes_var.get(),
         )
         if started:
@@ -180,6 +188,7 @@ class SessionBar:
         self._mgr.update_experiment_metadata(
             name=self._experiment_name_var.get(),
             chip_id=self._experiment_chip_id_var.get(),
+            aptamer_type=self._experiment_aptamer_type_var.get(),
             notes=self._experiment_notes_var.get(),
         )
 
@@ -188,9 +197,11 @@ class SessionBar:
             return
         self._experiment_name_var.set(data.get("experiment_name", ""))
         self._experiment_chip_id_var.set(data.get("chip_id", ""))
+        self._experiment_aptamer_type_var.set(data.get("aptamer_type", data.get("polymer_type", "")))
         self._experiment_notes_var.set(data.get("notes", ""))
 
     def _clear_experiment_metadata(self):
         self._experiment_name_var.set("")
         self._experiment_chip_id_var.set("")
+        self._experiment_aptamer_type_var.set("")
         self._experiment_notes_var.set("")

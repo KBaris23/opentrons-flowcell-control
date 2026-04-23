@@ -15,9 +15,9 @@ Public API
 SessionManager.start_session(name, user, notes)
 SessionManager.end_session()
 SessionManager.update_session_metadata(user, notes)
-SessionManager.start_experiment(name, chip_id, notes)
+SessionManager.start_experiment(name, chip_id, aptamer_type, notes)
 SessionManager.open_experiment(path)
-SessionManager.update_experiment_metadata(name, chip_id, notes)
+SessionManager.update_experiment_metadata(name, chip_id, aptamer_type, notes)
 SessionManager.end_experiment()
 SessionManager.require_session()    → session_path | None  (shows error dialog)
 SessionManager.require_experiment() → data_folder  | None  (shows error dialog)
@@ -307,7 +307,13 @@ class SessionManager:
 
     # ── Experiment lifecycle ───────────────────────────────────────────────────
 
-    def start_experiment(self, name: str, chip_id: str, notes: str = "") -> bool:
+    def start_experiment(
+        self,
+        name: str,
+        chip_id: str,
+        aptamer_type: str = "",
+        notes: str = "",
+    ) -> bool:
         """Create an experiment subfolder inside the current session.
 
         Returns True on success.
@@ -352,6 +358,7 @@ class SessionManager:
             "experiment_name":   name.strip() or folder_name,
             "experiment_folder": exp_path.name,
             "chip_id":           chip_id.strip(),
+            "aptamer_type":      aptamer_type.strip(),
             "notes":             notes.strip(),
             "started_at":        self._experiment_started_at,
             "ended_at":          None,
@@ -426,6 +433,9 @@ class SessionManager:
             legacy_chip_id = str(self._session_raw.get("chip_id") or "").strip()
             if legacy_chip_id:
                 data["chip_id"] = legacy_chip_id
+        if "aptamer_type" not in data and "polymer_type" in data:
+            data["aptamer_type"] = data.get("polymer_type", "")
+        data.setdefault("aptamer_type", "")
 
         if self.current_experiment_path and self.current_experiment_path != experiment_path:
             self.end_experiment()
@@ -444,10 +454,13 @@ class SessionManager:
                 self.log(f"Experiment open hook failed: {exc}")
         return True
 
-    def update_experiment_metadata(self, name: str, chip_id: str, notes: str):
+    def update_experiment_metadata(self, name: str, chip_id: str, aptamer_type: str, notes: str):
         """Update mutable experiment metadata fields without closing the experiment."""
         if not self._experiment_metadata_path:
             messagebox.showwarning("No Experiment", "Start or choose an experiment first.")
+            return
+        if not str(chip_id).strip():
+            messagebox.showwarning("Missing Metadata", "Chip ID is required for the experiment.")
             return
         self._experiment_raw.update({
             "experiment_name": name.strip() or self._experiment_raw.get("experiment_name", ""),
@@ -457,6 +470,7 @@ class SessionManager:
                 else self._experiment_raw.get("experiment_folder", "")
             ),
             "chip_id": chip_id.strip(),
+            "aptamer_type": aptamer_type.strip(),
             "notes": notes.strip(),
         })
         self._write_json(self._experiment_metadata_path, self._experiment_raw)

@@ -11,6 +11,7 @@ Responsible for:
 
 import threading
 import time
+import math
 from pathlib import Path
 from tkinter import messagebox
 import tkinter as tk
@@ -18,14 +19,38 @@ from tkinter import ttk
 import serial.tools.list_ports
 
 from core.mscript_parser import to_si_string
-from core.methodscript_compat import SUPPORTED_BA_LABELS, normalize_current_range_label, normalize_method_params
+from core.methodscript_compat import normalize_method_params
 from core.runner import format_port_info
 from config import DEVICE_KEYWORDS, CHEMYX_DEFAULT_PORT
 from core.session import SessionState
 from gui.tab_custom_script import CustomScriptPanel
 
-LOW_SPEED_BA_RANGES = SUPPORTED_BA_LABELS
-HIGH_SPEED_BA_RANGES = SUPPORTED_BA_LABELS
+LOW_SPEED_BA_RANGES = (
+    ("100 nA", "59n"),
+    ("2 uA", "1180n"),
+    ("4 uA", "2360n"),
+    ("8 uA", "4720n"),
+    ("16 uA", "9440n"),
+    ("32 uA", "18880n"),
+    ("63 uA", "37170n"),
+    ("125 uA", "73750n"),
+    ("250 uA", "147500n"),
+    ("500 uA", "295u"),
+    ("1 mA", "590u"),
+    ("5 mA", "2950u"),
+)
+HIGH_SPEED_BA_RANGES = (
+    ("100 nA", "59n"),
+    ("1 uA", "590n"),
+    ("6 uA", "3687500p"),
+    ("13 uA", "7375n"),
+    ("25 uA", "14750n"),
+    ("50 uA", "29500n"),
+    ("100 uA", "59u"),
+    ("200 uA", "118u"),
+    ("1 mA", "590u"),
+    ("5 mA", "2950u"),
+)
 
 class MethodTab:
     """Manages the 'Method Creation' notebook tab.
@@ -69,8 +94,10 @@ class MethodTab:
         self.cv_params:  dict  = {}
         self.lsv_params: dict  = {}
         self.swv_params: dict  = {}
+        self.alignment_params: dict = {}
         self.pause_params: dict = {}
         self._library_note = tk.StringVar(value="")
+        self._swv_bandwidth = tk.StringVar(value="4k")
         self._device_port_var = tk.StringVar(value="Auto (detect)")
         self._device_port_choices = []
         self._device_port_info_by_device = {}
@@ -97,6 +124,8 @@ class MethodTab:
         ttk.Separator(tech_frame, orient="horizontal").pack(fill="x", pady=6)
         ttk.Button(tech_frame, text="PStrace SWV Preset",
                 command=self._run_pstrace_preset, width=28).pack(pady=5)
+        ttk.Button(tech_frame, text="Alignment Test (Dry)",
+                command=self._show_alignment_params, width=28).pack(pady=5)
         ttk.Separator(tech_frame, orient="horizontal").pack(fill="x", pady=6)
         ttk.Button(tech_frame, text="Pause / Alert",
                    command=self._show_pause_params, width=28).pack(pady=5)
@@ -255,10 +284,14 @@ class MethodTab:
 
     @staticmethod
     def _ba_ranges_for(technique: str):
-        return HIGH_SPEED_BA_RANGES if technique == "SWV" else LOW_SPEED_BA_RANGES
+        return HIGH_SPEED_BA_RANGES if technique in {"LSV", "SWV"} else LOW_SPEED_BA_RANGES
+
+    @classmethod
+    def _ba_range_labels(cls, technique: str):
+        return [label for label, _token in cls._ba_ranges_for(technique)]
 
     def _default_current_range_state(self, technique: str):
-        ranges = self._ba_ranges_for(technique)
+        ranges = self._ba_range_labels(technique)
         if technique == "SWV":
             return {
                 "mode": "fixed",
@@ -266,15 +299,65 @@ class MethodTab:
                 "autorange_min": ranges[0],
                 "autorange_max": ranges[0],
             }
+        if technique == "LSV":
+            return {
+                "mode": "fixed",
+                "fixed": "16 uA",
+                "autorange_min": ranges[0],
+                "autorange_max": "16 uA",
+            }
         return {
             "mode": "autorange",
-            "fixed": ranges[-2],
+            "fixed": "125 uA",
             "autorange_min": ranges[0],
-            "autorange_max": ranges[-2],
+            "autorange_max": "125 uA",
         }
 
+    @staticmethod
+    def _range_label_value(label: str) -> float:
+        text = (label or "").strip()
+        value_str, unit = text.split()
+        scale = {
+            "pA": 1e-12,
+            "nA": 1e-9,
+            "uA": 1e-6,
+            "mA": 1e-3,
+            "A": 1.0,
+        }[unit]
+        return float(value_str) * scale
+
+    @classmethod
+    def _normalize_range_label(cls, profile, label: str, direction: str) -> str:
+        labels = [item_label for item_label, _token in profile]
+        if label in labels:
+            return label
+
+        target = cls._range_label_value(label)
+        choices = [(item_label, cls._range_label_value(item_label)) for item_label in labels]
+        if direction == "down":
+            eligible = [item_label for item_label, value in choices if value <= target]
+            return eligible[-1] if eligible else labels[0]
+        if direction == "up":
+            eligible = [item_label for item_label, value in choices if value >= target]
+            return eligible[0] if eligible else labels[-1]
+        return min(choices, key=lambda item: abs(item[1] - target))[0]
+
+    @staticmethod
+    def _range_selector(profile, label: str) -> str:
+        for item_label, token in profile:
+            if item_label == label:
+                return token
+        raise ValueError(f"Unsupported current range selection: {label}")
+
+    @staticmethod
+    def _range_index(profile, label: str) -> int:
+        for idx, (item_label, _token) in enumerate(profile):
+            if item_label == label:
+                return idx
+        raise ValueError(f"Unsupported current range selection: {label}")
+
     def _add_current_range_controls(self, row: int, technique: str, params: dict):
-        ranges = self._ba_ranges_for(technique)
+        ranges = self._ba_range_labels(technique)
         defaults = self._default_current_range_state(technique)
 
         frame = ttk.LabelFrame(
@@ -389,11 +472,11 @@ class MethodTab:
         self.current_technique = "LSV"
         self.lsv_params = {}
         params = [
-            ("Begin Potential (V):",                "begin_potential", "0"),
-            ("End Potential (V):",                  "end_potential",   "0.5"),
-            ("Step Potential (V):",                 "step_potential",  "0.002"),
-            ("Scan Rate (V/s):",                    "scan_rate",       "0.1"),
-            ("Conditioning Potential (V):",         "cond_potential",  "0"),
+            ("Begin Potential (V):",                "begin_potential", "-0.7"),
+            ("End Potential (V):",                  "end_potential",   "-1.0"),
+            ("Step Potential (V):",                 "step_potential",  "0.001"),
+            ("Scan Rate (V/s):",                    "scan_rate",       "0.001"),
+            ("Conditioning Potential (V):",         "cond_potential",  "-0.7"),
             ("Conditioning Time (s):",              "cond_time",       "0"),
             ("MUX16 Channels (1-16, 0=off):",       "mux_channel",     "0"),
         ]
@@ -445,7 +528,60 @@ class MethodTab:
             entry.grid(row=i, column=1, pady=2)
             self.swv_params[key] = entry
 
-        self._add_current_range_controls(len(params), "SWV", self.swv_params)
+        bandwidth_row = len(params)
+        ttk.Label(self._params_frame, text="Bandwidth (EmStat Pico):").grid(
+            row=bandwidth_row, column=0, sticky="w", pady=2
+        )
+        bw_box = ttk.Combobox(
+            self._params_frame,
+            textvariable=self._swv_bandwidth,
+            state="readonly",
+            width=12,
+            values=("4k", "8k"),
+        )
+        bw_box.grid(row=bandwidth_row, column=1, sticky="w", pady=2)
+        self.swv_params["bandwidth"] = self._swv_bandwidth
+
+        self._add_current_range_controls(bandwidth_row + 1, "SWV", self.swv_params)
+
+        ttk.Label(self._params_frame, text="Library note (optional):").grid(
+            row=bandwidth_row + 2, column=0, sticky="w", pady=2)
+        ttk.Entry(self._params_frame, width=40, textvariable=self._library_note).grid(
+            row=bandwidth_row + 2, column=1, sticky="w", pady=2)
+
+        btn_frame = ttk.Frame(self._params_frame)
+        btn_frame.grid(row=bandwidth_row + 3, column=0, columnspan=2, pady=20)
+        ttk.Button(btn_frame, text="Generate Script",
+                   command=self._generate_swv_script).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Run Now",
+                   command=self._run_swv_now).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Add to Queue",
+                   command=self._add_swv_to_queue).pack(side="left", padx=5)
+
+    def _show_alignment_params(self):
+        self._clear_params()
+        self.current_technique = "ALIGNMENT"
+        self.alignment_params = {}
+        params = [
+            ("DC Potential (V):",                 "dc_potential",      "0"),
+            ("AC Amplitude (V rms):",             "ac_amplitude",      "0.01"),
+            ("Start Frequency (Hz):",             "start_frequency",   "10"),
+            ("End Frequency (Hz):",               "end_frequency",     "10000"),
+            ("Points per Decade:",                "points_per_decade", "4"),
+            ("MUX16 Channels (1-16, 0=off):",     "mux_channel",       "0"),
+        ]
+        for i, (label, key, default) in enumerate(params):
+            ttk.Label(self._params_frame, text=label).grid(
+                row=i, column=0, sticky="w", pady=2)
+            entry = ttk.Entry(self._params_frame, width=15)
+            entry.insert(0, default)
+            entry.grid(row=i, column=1, pady=2)
+            self.alignment_params[key] = entry
+
+        ttk.Label(
+            self._params_frame,
+            text="Dry alignment preset: EIS sweep for impedance/capacitance checks.",
+        ).grid(row=len(params), column=0, columnspan=2, sticky="w", pady=(8, 2))
 
         ttk.Label(self._params_frame, text="Library note (optional):").grid(
             row=len(params) + 1, column=0, sticky="w", pady=2)
@@ -455,11 +591,11 @@ class MethodTab:
         btn_frame = ttk.Frame(self._params_frame)
         btn_frame.grid(row=len(params) + 2, column=0, columnspan=2, pady=20)
         ttk.Button(btn_frame, text="Generate Script",
-                   command=self._generate_swv_script).pack(side="left", padx=5)
+                   command=self._generate_alignment_script).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Run Now",
-                   command=self._run_swv_now).pack(side="left", padx=5)
+                   command=self._run_alignment_now).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Add to Queue",
-                   command=self._add_swv_to_queue).pack(side="left", padx=5)
+                   command=self._add_alignment_to_queue).pack(side="left", padx=5)
 
     def _show_pause_params(self):
         self._clear_params()
@@ -499,37 +635,44 @@ class MethodTab:
                 raw[key] = widget_or_var.get()
         return normalize_method_params(raw)
 
-    def _get_current_range_settings(self, params: dict, technique: str):
-        ranges = self._ba_ranges_for(technique)
-        by_index = {value: idx for idx, value in enumerate(ranges)}
+    def _serialize_ba_range_config(self, params: dict, technique: str) -> dict:
+        settings = self._get_current_range_settings(params, technique)
+        return {
+            "ba_autorange": "1" if settings["mode"] == "autorange" else "0",
+            "ba_range_mode": settings["mode"],
+            "ba_fixed_range": settings["fixed_label"],
+            "ba_auto_min": settings["autorange_min_label"],
+            "ba_auto_max": settings["autorange_max_label"],
+        }
 
+    def _get_current_range_settings(self, params: dict, technique: str):
+        profile = self._ba_ranges_for(technique)
         mode = (params["current_range_mode"].get() or "autorange").strip().lower()
-        fixed = normalize_current_range_label(params["current_range_fixed"].get(), role="fixed")
-        auto_min = normalize_current_range_label(
-            params["current_range_autorange_min"].get(),
-            role="autorange_min",
+        fixed_label = self._normalize_range_label(profile, params["current_range_fixed"].get().strip(), "up")
+        auto_min_label = self._normalize_range_label(
+            profile,
+            params["current_range_autorange_min"].get().strip(),
+            "down",
         )
-        auto_max = normalize_current_range_label(
-            params["current_range_autorange_max"].get(),
-            role="autorange_max",
+        auto_max_label = self._normalize_range_label(
+            profile,
+            params["current_range_autorange_max"].get().strip(),
+            "up",
         )
 
         if mode not in {"fixed", "autorange"}:
             raise ValueError("Current range mode must be Fixed or Autorange.")
-        if fixed not in by_index:
-            raise ValueError(f"Invalid fixed current range: {fixed}")
-        if auto_min not in by_index:
-            raise ValueError(f"Invalid autorange minimum: {auto_min}")
-        if auto_max not in by_index:
-            raise ValueError(f"Invalid autorange maximum: {auto_max}")
-        if by_index[auto_min] > by_index[auto_max]:
+        if self._range_index(profile, auto_min_label) > self._range_index(profile, auto_max_label):
             raise ValueError("Autorange minimum cannot exceed autorange maximum.")
 
         return {
             "mode": mode,
-            "fixed": fixed,
-            "autorange_min": auto_min,
-            "autorange_max": auto_max,
+            "fixed_label": fixed_label,
+            "autorange_min_label": auto_min_label,
+            "autorange_max_label": auto_max_label,
+            "fixed": self._range_selector(profile, fixed_label),
+            "autorange_min": self._range_selector(profile, auto_min_label),
+            "autorange_max": self._range_selector(profile, auto_max_label),
         }
 
     def _current_range_commands(self, params: dict, technique: str):
@@ -548,6 +691,9 @@ class MethodTab:
 
     def _build_cv_script(self) -> str:
         p = self.cv_params
+        begin_v    = float(p["begin_potential"].get())
+        vertex1_v  = float(p["vertex1"].get())
+        vertex2_v  = float(p["vertex2"].get())
         begin      = to_si_string(p["begin_potential"].get(), "V")
         v1         = to_si_string(p["vertex1"].get(),         "V")
         v2         = to_si_string(p["vertex2"].get(),         "V")
@@ -559,7 +705,12 @@ class MethodTab:
 
         parts = [
             "e", "var c", "var p",
-            "set_pgstat_mode 2", "set_max_bandwidth 40",
+            "set_pgstat_chan 1",
+            "set_pgstat_mode 0",
+            "set_pgstat_chan 0",
+            "set_pgstat_mode 2",
+            "set_max_bandwidth 66667m",
+            f"set_range_minmax da {to_si_string(str(min(begin_v, vertex1_v, vertex2_v)), 'V')} {to_si_string(str(max(begin_v, vertex1_v, vertex2_v)), 'V')}",
         ]
         parts += self._current_range_commands(p, "CV")
         if float(cond_time) > 0:
@@ -578,6 +729,8 @@ class MethodTab:
 
     def _build_lsv_script(self) -> str:
         p = self.lsv_params
+        begin_v    = float(p["begin_potential"].get())
+        end_v      = float(p["end_potential"].get())
         begin      = to_si_string(p["begin_potential"].get(), "V")
         end        = to_si_string(p["end_potential"].get(),   "V")
         step       = to_si_string(p["step_potential"].get(),  "V")
@@ -587,17 +740,22 @@ class MethodTab:
 
         parts = [
             "e", "var c", "var p",
-            "set_pgstat_mode 2", "set_max_bandwidth 40",
+            "set_pgstat_chan 1",
+            "set_pgstat_mode 0",
+            "set_pgstat_chan 0",
+            "set_pgstat_mode 2",
+            "set_max_bandwidth 4",
+            f"set_range_minmax da {int(min(begin_v, end_v) * 1000)}m {int(max(begin_v, end_v) * 1000)}m",
         ]
         parts += self._current_range_commands(p, "LSV")
         if float(cond_time) > 0:
             parts += [f"set_e {cond_pot}", "cell_on",
                       f"# Condition for {cond_time}s", f"wait {cond_time}"]
+            parts += [f"set_e {begin}"]
         else:
             parts += [f"set_e {begin}", "cell_on"]
 
         parts += [
-            "# LSV measurement loop",
             f"meas_loop_lsv p c {begin} {end} {step} {scan_rate}",
             "\tpck_start", "\tpck_add p", "\tpck_add c", "\tpck_end",
             "endloop", "on_finished:", "cell_off",
@@ -609,6 +767,8 @@ class MethodTab:
         begin_v  = float(p["begin_potential"].get())
         end_v    = float(p["end_potential"].get())
         amp_v    = float(p["amplitude"].get())
+        cond_time_s = float(p["cond_time"].get())
+        freq_hz = float(p["frequency"].get())
 
         begin     = to_si_string(p["begin_potential"].get(), "V")
         end       = to_si_string(p["end_potential"].get(),   "V")
@@ -617,9 +777,17 @@ class MethodTab:
         frequency = to_si_string(p["frequency"].get(),       "Hz")
         cond_pot  = to_si_string(p["cond_potential"].get(),  "V")
         cond_time = p["cond_time"].get()
+        bandwidth = (self._swv_bandwidth.get() or "4k").strip().lower()
+        if bandwidth not in ("4k", "8k"):
+            raise ValueError(f"Unsupported SWV bandwidth: {bandwidth}")
 
         min_mv = int((min(begin_v, end_v) - amp_v) * 1000)
         max_mv = int((max(begin_v, end_v) + amp_v) * 1000)
+        use_equilibrium_check = cond_time_s > 0
+        eq_interval_s = min(0.2, cond_time_s) if use_equilibrium_check else 0.0
+        swv_time_step = to_si_string(str(1.0 / freq_hz), "s") if freq_hz > 0 else "0"
+        eq_duration = to_si_string(cond_time, "s") if use_equilibrium_check else "0"
+        eq_interval = to_si_string(str(eq_interval_s), "s") if use_equilibrium_check else "0"
 
         parts = [
             "e", "var c", "var p", "var f", "var r",
@@ -627,24 +795,102 @@ class MethodTab:
             "set_pgstat_mode 0",
             "set_pgstat_chan 0",
             "set_pgstat_mode 3",
-            "set_max_bandwidth 4k",
+            f"set_max_bandwidth {bandwidth}",
             f"set_range_minmax da {min_mv}m {max_mv}m",
         ]
+        if use_equilibrium_check:
+            parts.insert(5, "var t")
         parts += self._current_range_commands(p, "SWV")
-        parts += ["cell_on"]
-        if float(cond_time) > 0:
+        parts += [f"set_e {cond_pot if use_equilibrium_check else begin}", "cell_on"]
+        if use_equilibrium_check:
             parts += [
-                f"# Pre-equilibrate at {cond_pot} for {cond_time}s using CA",
-                f"set_e {cond_pot}",
-                f"meas_loop_ca p c {cond_pot} 200m {cond_time}",
+                f"# Equilibrium check at {cond_pot} for {cond_time}s",
+                "store_var t 0 eb",
+                f"meas_loop_ca p c {cond_pot} {eq_interval} {eq_duration}",
+                "\tpck_start",
+                "\t\tpck_add t",
+                "\t\tpck_add p",
+                "\t\tpck_add c",
+                "\tpck_end",
+                f"\tadd_var t {eq_interval}",
                 "endloop",
+                "store_var t 0 eb",
+                f"set_e {begin}",
             ]
-        parts += [f"set_e {begin}"]
+        else:
+            parts += [f"set_e {begin}"]
         parts += [
             f"meas_loop_swv p c f r {begin} {end} {step} {amplitude} {frequency}",
-            "\tpck_start", "\t\tpck_add p", "\t\tpck_add c",
-            "\t\tpck_add f", "\t\tpck_add r", "\tpck_end", "endloop",
-            "on_finished:", "cell_off",
+        ]
+        if use_equilibrium_check:
+            parts += [
+                "\tpck_start",
+                "\t\tpck_add p",
+                "\t\tpck_add c",
+                "\t\tpck_add f",
+                "\t\tpck_add r",
+                "\t\tpck_add t",
+                "\tpck_end",
+                f"\tadd_var t {swv_time_step}",
+            ]
+        else:
+            parts += [
+                "\tpck_start",
+                "\t\tpck_add p",
+                "\t\tpck_add c",
+                "\t\tpck_add f",
+                "\t\tpck_add r",
+                "\tpck_end",
+            ]
+        parts += ["endloop", "on_finished:", "cell_off"]
+        return "\n".join(parts)
+
+    def _build_alignment_script(self) -> str:
+        p = self.alignment_params
+        ac_amplitude_v = float(p["ac_amplitude"].get())
+        start_frequency_hz = float(p["start_frequency"].get())
+        end_frequency_hz = float(p["end_frequency"].get())
+        points_per_decade = float(p["points_per_decade"].get())
+
+        if start_frequency_hz <= 0 or end_frequency_hz <= 0:
+            raise ValueError("Alignment frequencies must be positive.")
+        if ac_amplitude_v <= 0:
+            raise ValueError("AC amplitude must be positive.")
+        if points_per_decade <= 0:
+            raise ValueError("Points per decade must be positive.")
+
+        start_frequency = to_si_string(p["start_frequency"].get(), "Hz")
+        end_frequency = to_si_string(p["end_frequency"].get(), "Hz")
+        ac_amplitude = to_si_string(p["ac_amplitude"].get(), "V")
+        dc_potential = to_si_string(p["dc_potential"].get(), "V")
+
+        decades = abs(math.log10(end_frequency_hz) - math.log10(start_frequency_hz))
+        n_points = max(1, int(round(decades * points_per_decade)) + 1)
+
+        parts = [
+            "e",
+            "var f",
+            "var z",
+            "var i",
+            "set_pgstat_chan 1",
+            "set_pgstat_mode 0",
+            "set_pgstat_chan 0",
+            "set_pgstat_mode 3",
+            "set_max_bandwidth 40",
+            "set_range ba 100u",
+            "set_autoranging ba 1n 100u",
+            "cell_on",
+            f"set_e {dc_potential}",
+            "# Dry alignment EIS sweep",
+            f"meas_loop_eis f z i {ac_amplitude} {start_frequency} {end_frequency} {n_points}i {dc_potential}",
+            "\tpck_start",
+            "\t\tpck_add f",
+            "\t\tpck_add z",
+            "\t\tpck_add i",
+            "\tpck_end",
+            "endloop",
+            "on_finished:",
+            "cell_off",
         ]
         return "\n".join(parts)
 
@@ -778,6 +1024,24 @@ class MethodTab:
         except Exception as exc:
             messagebox.showerror("Error", f"Failed to generate script: {exc}")
 
+    def _generate_alignment_script(self):
+        try:
+            base = self._build_alignment_script()
+            mux = self._get_mux_channels(self.alignment_params)
+            if mux is None:
+                return
+            script = base
+            if mux:
+                script = self._wrap_mux(base, mux[0])
+                if len(mux) > 1:
+                    script = (
+                        f"# NOTE: Multiple channels selected ({', '.join(map(str, mux))}). "
+                        f"Preview shows ch {mux[0]}.\n"
+                    ) + script
+            self._script_preview(script)
+        except Exception as exc:
+            messagebox.showerror("Error", f"Failed to generate script: {exc}")
+
     # ── Add to queue ──────────────────────────────────────────────────────────
 
     def _add_one(self, technique: str, script: str, params: dict, mux_channel=None, note: str = ""):
@@ -803,6 +1067,7 @@ class MethodTab:
             return
         # Extract raw string values for hashing
         raw_params = self._raw_param_values(self.cv_params)
+        raw_params.update(self._serialize_ba_range_config(self.cv_params, "CV"))
         note = (self._library_note.get() or "").strip()
         if mux:
             for ch in mux:
@@ -822,6 +1087,7 @@ class MethodTab:
         if mux is None:
             return
         raw_params = self._raw_param_values(self.lsv_params)
+        raw_params.update(self._serialize_ba_range_config(self.lsv_params, "LSV"))
         note = (self._library_note.get() or "").strip()
         if mux:
             for ch in mux:
@@ -844,6 +1110,7 @@ class MethodTab:
         if n_scans is None:
             return
         raw_params = self._raw_param_values(self.swv_params)
+        raw_params.update(self._serialize_ba_range_config(self.swv_params, "SWV"))
         note = (self._library_note.get() or "").strip()
 
         added = []
@@ -893,6 +1160,25 @@ class MethodTab:
         self._refresh_queue()
         messagebox.showinfo("Success", f"Pause ({secs:.1f} sec) added to queue")
 
+    def _add_alignment_to_queue(self):
+        try:
+            base = self._build_alignment_script()
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc)); return
+        mux = self._get_mux_channels(self.alignment_params)
+        if mux is None:
+            return
+        raw_params = {k: v.get() for k, v in self.alignment_params.items()}
+        note = (self._library_note.get() or "").strip()
+        if mux:
+            for ch in mux:
+                self._add_one("ALIGNMENT", self._wrap_mux(base, ch), raw_params, mux_channel=ch, note=note)
+            messagebox.showinfo("Success", f"Alignment test added for MUX channels: {', '.join(map(str, mux))}")
+        else:
+            self._add_one("ALIGNMENT", base, raw_params, note=note)
+            messagebox.showinfo("Success", "Alignment test added to queue")
+        self._refresh_queue()
+
     def _add_alert_pause_to_queue(self):
         msg = (self.pause_params.get("alert_message", tk.StringVar()).get() or "").strip()
         if not msg:
@@ -915,14 +1201,16 @@ class MethodTab:
         mux = self._get_mux_channels(self.cv_params)
         if mux is None:
             return
+        raw_params = self._raw_param_values(self.cv_params)
+        raw_params.update(self._serialize_ba_range_config(self.cv_params, "CV"))
         if mux:
             if len(mux) == 1:
-                self._run_now("CV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": self._raw_param_values(self.cv_params)})
+                self._run_now("CV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": raw_params})
             else:
                 # Multi-channel: delegate to app for sequence run
-                self._run_now("CV_MUX_SEQ", base, {"channels": mux, "params": self._raw_param_values(self.cv_params)})
+                self._run_now("CV_MUX_SEQ", base, {"channels": mux, "params": raw_params})
         else:
-            self._run_now("CV", base, {"mux_channel": None, "params": self._raw_param_values(self.cv_params)})
+            self._run_now("CV", base, {"mux_channel": None, "params": raw_params})
 
     def _run_lsv_now(self):
         try:
@@ -932,13 +1220,15 @@ class MethodTab:
         mux = self._get_mux_channels(self.lsv_params)
         if mux is None:
             return
+        raw_params = self._raw_param_values(self.lsv_params)
+        raw_params.update(self._serialize_ba_range_config(self.lsv_params, "LSV"))
         if mux:
             if len(mux) == 1:
-                self._run_now("LSV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": self._raw_param_values(self.lsv_params)})
+                self._run_now("LSV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": raw_params})
             else:
-                self._run_now("LSV_MUX_SEQ", base, {"channels": mux, "params": self._raw_param_values(self.lsv_params)})
+                self._run_now("LSV_MUX_SEQ", base, {"channels": mux, "params": raw_params})
         else:
-            self._run_now("LSV", base, {"mux_channel": None, "params": self._raw_param_values(self.lsv_params)})
+            self._run_now("LSV", base, {"mux_channel": None, "params": raw_params})
 
     def _run_swv_now(self):
         try:
@@ -951,16 +1241,18 @@ class MethodTab:
         n_scans, delay = self._get_swv_cycles_and_delay()
         if n_scans is None:
             return
+        raw_params = self._raw_param_values(self.swv_params)
+        raw_params.update(self._serialize_ba_range_config(self.swv_params, "SWV"))
         if mux:
             if len(mux) == 1 and n_scans == 1:
-                self._run_now("SWV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": self._raw_param_values(self.swv_params)})
+                self._run_now("SWV", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": raw_params})
             else:
-                self._run_now("SWV_MUX_CYCLES", base, {"channels": mux, "n_scans": n_scans, "delay": delay, "params": self._raw_param_values(self.swv_params)})
+                self._run_now("SWV_MUX_CYCLES", base, {"channels": mux, "n_scans": n_scans, "delay": delay, "params": raw_params})
         else:
             if n_scans == 1:
-                self._run_now("SWV", base, {"mux_channel": None, "params": self._raw_param_values(self.swv_params)})
+                self._run_now("SWV", base, {"mux_channel": None, "params": raw_params})
             else:
-                self._run_now("SWV_CYCLES", base, {"n_scans": n_scans, "delay": delay, "params": self._raw_param_values(self.swv_params)})
+                self._run_now("SWV_CYCLES", base, {"n_scans": n_scans, "delay": delay, "params": raw_params})
 
     def _run_pause_now(self):
         try:
@@ -976,6 +1268,23 @@ class MethodTab:
 
         threading.Thread(target=_do, daemon=True).start()
         self._session.log(f"Immediate pause started ({secs:.1f} sec)…")
+    def _run_alignment_now(self):
+        try:
+            base = self._build_alignment_script()
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc)); return
+        mux = self._get_mux_channels(self.alignment_params)
+        if mux is None:
+            return
+        raw_params = {k: v.get() for k, v in self.alignment_params.items()}
+        if mux:
+            if len(mux) == 1:
+                self._run_now("ALIGNMENT", self._wrap_mux(base, mux[0]), {"mux_channel": mux[0], "params": raw_params})
+            else:
+                self._run_now("ALIGNMENT_MUX_SEQ", base, {"channels": mux, "params": raw_params})
+        else:
+            self._run_now("ALIGNMENT", base, {"mux_channel": None, "params": raw_params})
+
     def _show_custom_params(self):
         self._clear_params()
         self.current_technique = "CUSTOM"
@@ -1010,6 +1319,10 @@ class MethodTab:
             "set_e -500m\n"
             "cell_on\n"
             "meas_loop_ca p c -500m 200m 1\n"
+            "  pck_start\n"
+            "    pck_add p\n"
+            "    pck_add c\n"
+            "  pck_end\n"
             "endloop\n"
             "meas_loop_swv p c f g -500m 0 2m 36m 100\n"
             "  pck_start\n"
