@@ -1587,17 +1587,20 @@ class RecipeMakerTab:
         total = len(self._tree.get_children())
         if total == 0:
             return
+        parent = self._tree.winfo_toplevel()
         start = simpledialog.askinteger(
             "Select Range",
             f"Start row (1-{total}):",
-            minvalue=1, maxvalue=total
+            minvalue=1, maxvalue=total,
+            parent=parent,
         )
         if start is None:
             return
         end = simpledialog.askinteger(
             "Select Range",
             f"End row (1-{total}):",
-            minvalue=1, maxvalue=total
+            minvalue=1, maxvalue=total,
+            parent=parent,
         )
         if end is None:
             return
