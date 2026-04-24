@@ -721,5 +721,283 @@
     "filepath": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Kana_10_steps.py",
     "updated_at": "2026-04-09T11:56:00",
     "protocol_id": "otproto_15e794fb5f7f78f8"
+  },
+  "generated_ui_protocol_69db53": {
+    "kind": "generated_ui_protocol",
+    "params": {
+      "labware": [
+        {
+          "alias": "tips_20ul",
+          "load_name": "opentrons_96_filtertiprack_20ul",
+          "slot": "7"
+        },
+        {
+          "alias": "tips_200ul",
+          "load_name": "opentrons_96_filtertiprack_200ul",
+          "slot": "8"
+        },
+        {
+          "alias": "stock",
+          "load_name": "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap",
+          "slot": "2"
+        },
+        {
+          "alias": "dilute",
+          "load_name": "opentrons_6_tuberack_falcon_50ml_conical",
+          "slot": "3"
+        }
+      ],
+      "metadata": {
+        "api_level": "2.19",
+        "author": "Opentrons Flowcell Console",
+        "description": "titration with 0, 5.1, 5.2, 10.5, 21.2, 43,, 87.5, 180, 375, 820 uL pipetting",
+        "protocol_name": "Titration_Amp0_10_steps",
+        "robot_type": "OT-2"
+      },
+      "pipette": {
+        "model": "p20_single_gen2",
+        "mount": "left",
+        "starting_tip": "A1",
+        "tiprack_alias": "tips_20ul"
+      },
+      "secondary_pipette": {
+        "model": "p300_single_gen2",
+        "mount": "right",
+        "starting_tip": "A2",
+        "tiprack_alias": "tips_200ul"
+      },
+      "steps": [
+        {
+          "comment": "start titration step 1",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 5.1
+        },
+        {
+          "kind": "pause",
+          "message": "first step done"
+        },
+        {
+          "comment": "start titration step 2",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 5.2
+        },
+        {
+          "kind": "pause",
+          "message": "step 2 done"
+        },
+        {
+          "comment": "start titration step 3",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 10.5
+        },
+        {
+          "kind": "pause",
+          "message": "step 3 done"
+        },
+        {
+          "comment": "start titration step 4",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 21.2
+        },
+        {
+          "kind": "pause",
+          "message": "step 4 done"
+        },
+        {
+          "comment": "start titration step 5",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 43.0
+        },
+        {
+          "kind": "pause",
+          "message": "step 5 done"
+        },
+        {
+          "comment": "start titration step 6",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 87.5
+        },
+        {
+          "kind": "pause",
+          "message": "step 6 done"
+        },
+        {
+          "comment": "start titration step 7",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 180.0
+        },
+        {
+          "kind": "pause",
+          "message": "step 7 done"
+        },
+        {
+          "comment": "start titration step 8",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 175.0
+        },
+        {
+          "kind": "pause",
+          "message": "step 8 done"
+        },
+        {
+          "comment": "start titration step 9",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "dilute",
+          "dest_well": "B2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "primary",
+          "source_alias": "stock",
+          "source_well": "D1",
+          "volume_ul": 20.0
+        },
+        {
+          "comment": "titration completed",
+          "kind": "comment"
+        }
+      ]
+    },
+    "note": "Titration_Amp0_10_steps",
+    "added_at": "2026-04-17T18:00:43",
+    "filepath": "opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+    "protocol_id": "otproto_7d3637d14243aebc"
   }
 }
