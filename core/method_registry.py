@@ -12,7 +12,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 from methods.library_map import compute_hash, lookup, register, update_note
 from config import METHODS_DIR, SAVE_DATED_METHOD_COPIES
-from core.methodscript_compat import normalize_method_params, normalized_script_hash
+from core.methodscript_compat import normalized_script_hash
 
 
 class MethodRegistry:
@@ -47,11 +47,20 @@ class MethodRegistry:
         Level 2: persistent library (methods/library)
         Level 3: new script -> write to library (+ optional dated working copy)
         """
+        # Backward compatibility: older call sites passed mux_channel as the
+        # third positional argument.
+        if params is not None and not isinstance(params, dict):
+            if mux_channel is None:
+                mux_channel = params
+                params = None
+            else:
+                raise TypeError(
+                    "params must be a dict when provided; "
+                    f"got {type(params).__name__}"
+                )
         if params is None:
             # Fall back to script-content hashing for ad-hoc scripts.
             params = {"_script_hash": normalized_script_hash(script)}
-        else:
-            params = normalize_method_params(params)
         key = self._make_key(technique, params, mux_channel)
 
         # Level 1: session cache

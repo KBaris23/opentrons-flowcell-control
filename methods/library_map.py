@@ -16,11 +16,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from core.methodscript_compat import (
-    normalize_method_params,
-    normalize_script_text,
-    score_param_richness,
-)
+from core.methodscript_compat import normalize_script_text, score_param_richness
 
 _METHODS_ROOT = Path("methods")
 _LIBRARY_DIR = _METHODS_ROOT / "library"
@@ -81,8 +77,10 @@ def compute_hash(technique: str, params: dict, mux_channel: Optional[int]) -> st
     if mux_channel is not None:
         slug = f"{slug}_ch{mux_channel}"
 
-    normalized_params = normalize_method_params(params)
-    canonical = json.dumps({k: normalized_params[k] for k in sorted(normalized_params)}, separators=(",", ":"))
+    canonical = json.dumps(
+        {k: str(v).strip() for k, v in sorted(params.items())},
+        separators=(",", ":"),
+    )
     raw = f"{slug}||{canonical}"
     try:
         h = hashlib.md5(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:6]
@@ -125,12 +123,11 @@ def register(
     mux_channel = _normalize_mux_channel(mux_channel)
     lib_path = _library_dir_for(mux_channel) / f"{hash_key}.ms"
     lib_path.write_text(script, encoding="utf-8")
-    normalized_params = normalize_method_params(params)
 
     _map[hash_key] = {
         "technique": technique,
         "mux_channel": mux_channel if mux_channel is not None else 0,
-        "params": normalized_params,
+        "params": {k: str(v).strip() for k, v in params.items()},
         "note": (note or "").strip(),
         "added_at": datetime.now().isoformat(timespec="seconds"),
         "filepath": str(lib_path),

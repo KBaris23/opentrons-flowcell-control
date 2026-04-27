@@ -19,25 +19,40 @@ from tkinter import ttk
 import serial.tools.list_ports
 
 from core.mscript_parser import to_si_string
-from core.methodscript_compat import normalize_method_params
 from core.runner import format_port_info
 from config import DEVICE_KEYWORDS, CHEMYX_DEFAULT_PORT
 from core.session import SessionState
 from gui.tab_custom_script import CustomScriptPanel
 
-LOW_SPEED_BA_RANGES = (
-    ("100 nA", "59n"),
-    ("2 uA", "1180n"),
-    ("4 uA", "2360n"),
-    ("8 uA", "4720n"),
-    ("16 uA", "9440n"),
-    ("32 uA", "18880n"),
-    ("63 uA", "37170n"),
-    ("125 uA", "73750n"),
-    ("250 uA", "147500n"),
-    ("500 uA", "295u"),
-    ("1 mA", "590u"),
-    ("5 mA", "2950u"),
+EMSTAT_PICO_LOW_SPEED_FIXED_BA_RANGES = (
+    ("100 nA", "100n"),
+    ("2 uA", "2u"),
+    ("4 uA", "4u"),
+    ("8 uA", "8u"),
+    ("16 uA", "16u"),
+    ("32 uA", "32u"),
+    ("63 uA", "63u"),
+    ("125 uA", "125u"),
+    ("250 uA", "250u"),
+    ("500 uA", "500u"),
+    ("1 mA", "1m"),
+    ("5 mA", "5m"),
+)
+EMSTAT_PICO_LOW_SPEED_AUTORANGE_BA_RANGES = (
+    ("1 nA", "1n"),
+    ("100 nA", "100n"),
+    ("2 uA", "2u"),
+    ("4 uA", "4u"),
+    ("8 uA", "8u"),
+    ("16 uA", "16u"),
+    ("32 uA", "32u"),
+    ("63 uA", "63u"),
+    ("100 uA", "100u"),
+    ("125 uA", "125u"),
+    ("250 uA", "250u"),
+    ("500 uA", "500u"),
+    ("1 mA", "1m"),
+    ("5 mA", "5m"),
 )
 HIGH_SPEED_BA_RANGES = (
     ("100 nA", "59n"),
@@ -283,34 +298,38 @@ class MethodTab:
             w.destroy()
 
     @staticmethod
-    def _ba_ranges_for(technique: str):
-        return HIGH_SPEED_BA_RANGES if technique in {"LSV", "SWV"} else LOW_SPEED_BA_RANGES
+    def _ba_range_profiles_for(technique: str):
+        if technique == "CV":
+            return EMSTAT_PICO_LOW_SPEED_FIXED_BA_RANGES, EMSTAT_PICO_LOW_SPEED_AUTORANGE_BA_RANGES
+        return HIGH_SPEED_BA_RANGES, HIGH_SPEED_BA_RANGES
 
     @classmethod
-    def _ba_range_labels(cls, technique: str):
-        return [label for label, _token in cls._ba_ranges_for(technique)]
+    def _ba_range_labels(cls, profile):
+        return [label for label, _token in profile]
 
     def _default_current_range_state(self, technique: str):
-        ranges = self._ba_range_labels(technique)
+        fixed_profile, auto_profile = self._ba_range_profiles_for(technique)
+        fixed_ranges = self._ba_range_labels(fixed_profile)
+        auto_ranges = self._ba_range_labels(auto_profile)
         if technique == "SWV":
             return {
                 "mode": "fixed",
-                "fixed": ranges[0],
-                "autorange_min": ranges[0],
-                "autorange_max": ranges[0],
+                "fixed": fixed_ranges[0],
+                "autorange_min": auto_ranges[0],
+                "autorange_max": auto_ranges[0],
             }
         if technique == "LSV":
             return {
                 "mode": "fixed",
                 "fixed": "16 uA",
-                "autorange_min": ranges[0],
+                "autorange_min": auto_ranges[0],
                 "autorange_max": "16 uA",
             }
         return {
-            "mode": "autorange",
+            "mode": "auto",
             "fixed": "125 uA",
-            "autorange_min": ranges[0],
-            "autorange_max": "125 uA",
+            "autorange_min": auto_ranges[0],
+            "autorange_max": "100 uA",
         }
 
     @staticmethod
@@ -357,7 +376,9 @@ class MethodTab:
         raise ValueError(f"Unsupported current range selection: {label}")
 
     def _add_current_range_controls(self, row: int, technique: str, params: dict):
-        ranges = self._ba_range_labels(technique)
+        fixed_profile, auto_profile = self._ba_range_profiles_for(technique)
+        fixed_ranges = self._ba_range_labels(fixed_profile)
+        auto_ranges = self._ba_range_labels(auto_profile)
         defaults = self._default_current_range_state(technique)
 
         frame = ttk.LabelFrame(
@@ -377,7 +398,7 @@ class MethodTab:
         mode_frame = ttk.Frame(frame)
         mode_frame.grid(row=0, column=1, columnspan=2, sticky="w", pady=2)
         ttk.Radiobutton(
-            mode_frame, text="Autorange", value="autorange", variable=mode_var
+            mode_frame, text="Autorange", value="auto", variable=mode_var
         ).pack(side="left", padx=(0, 10))
         ttk.Radiobutton(
             mode_frame, text="Fixed", value="fixed", variable=mode_var
@@ -387,7 +408,7 @@ class MethodTab:
         fixed_box = ttk.Combobox(
             frame,
             textvariable=fixed_var,
-            values=ranges,
+            values=fixed_ranges,
             state="readonly",
             width=12,
         )
@@ -397,7 +418,7 @@ class MethodTab:
         auto_min_box = ttk.Combobox(
             frame,
             textvariable=auto_min_var,
-            values=ranges,
+            values=auto_ranges,
             state="readonly",
             width=12,
         )
@@ -407,7 +428,7 @@ class MethodTab:
         auto_max_box = ttk.Combobox(
             frame,
             textvariable=auto_max_var,
-            values=ranges,
+            values=auto_ranges,
             state="readonly",
             width=12,
         )
@@ -629,16 +650,16 @@ class MethodTab:
 
     @staticmethod
     def _raw_param_values(params: dict):
-        raw = {}
-        for key, widget_or_var in params.items():
-            if hasattr(widget_or_var, "get"):
-                raw[key] = widget_or_var.get()
-        return normalize_method_params(raw)
+        return {
+            str(key): str(widget_or_var.get()).strip()
+            for key, widget_or_var in params.items()
+            if hasattr(widget_or_var, "get")
+        }
 
     def _serialize_ba_range_config(self, params: dict, technique: str) -> dict:
         settings = self._get_current_range_settings(params, technique)
         return {
-            "ba_autorange": "1" if settings["mode"] == "autorange" else "0",
+            "ba_autorange": "1" if settings["mode"] == "auto" else "0",
             "ba_range_mode": settings["mode"],
             "ba_fixed_range": settings["fixed_label"],
             "ba_auto_min": settings["autorange_min_label"],
@@ -646,54 +667,69 @@ class MethodTab:
         }
 
     def _get_current_range_settings(self, params: dict, technique: str):
-        profile = self._ba_ranges_for(technique)
-        mode = (params["current_range_mode"].get() or "autorange").strip().lower()
-        fixed_label = self._normalize_range_label(profile, params["current_range_fixed"].get().strip(), "up")
+        fixed_profile, auto_profile = self._ba_range_profiles_for(technique)
+        mode = (params["current_range_mode"].get() or "fixed").strip().lower()
+        fixed_label = self._normalize_range_label(
+            fixed_profile, params["current_range_fixed"].get().strip(), "up"
+        )
         auto_min_label = self._normalize_range_label(
-            profile,
+            auto_profile,
             params["current_range_autorange_min"].get().strip(),
             "down",
         )
         auto_max_label = self._normalize_range_label(
-            profile,
+            auto_profile,
             params["current_range_autorange_max"].get().strip(),
             "up",
         )
 
-        if mode not in {"fixed", "autorange"}:
+        fixed_labels = self._ba_range_labels(fixed_profile)
+        auto_labels = self._ba_range_labels(auto_profile)
+        if fixed_label not in fixed_labels:
+            raise ValueError(f"Invalid fixed current range: {fixed_label or '(empty)'}")
+        if auto_min_label not in auto_labels:
+            raise ValueError(f"Invalid autorange minimum: {auto_min_label or '(empty)'}")
+        if auto_max_label not in auto_labels:
+            raise ValueError(f"Invalid autorange maximum: {auto_max_label or '(empty)'}")
+        if mode not in {"fixed", "auto"}:
             raise ValueError("Current range mode must be Fixed or Autorange.")
-        if self._range_index(profile, auto_min_label) > self._range_index(profile, auto_max_label):
-            raise ValueError("Autorange minimum cannot exceed autorange maximum.")
+        if self._range_index(auto_profile, auto_min_label) > self._range_index(auto_profile, auto_max_label):
+            raise ValueError("Autorange minimum must be less than or equal to autorange maximum.")
+
+        if mode == "auto":
+            set_range_value = self._range_selector(auto_profile, auto_max_label)
+            auto_min_value = self._range_selector(auto_profile, auto_min_label)
+            auto_max_value = self._range_selector(auto_profile, auto_max_label)
+        else:
+            mode = "fixed"
+            set_range_value = self._range_selector(fixed_profile, fixed_label)
+            auto_min_value = set_range_value
+            auto_max_value = set_range_value
 
         return {
             "mode": mode,
             "fixed_label": fixed_label,
             "autorange_min_label": auto_min_label,
             "autorange_max_label": auto_max_label,
-            "fixed": self._range_selector(profile, fixed_label),
-            "autorange_min": self._range_selector(profile, auto_min_label),
-            "autorange_max": self._range_selector(profile, auto_max_label),
+            "set_range_value": set_range_value,
+            "autorange_min": auto_min_value,
+            "autorange_max": auto_max_value,
         }
 
     def _current_range_commands(self, params: dict, technique: str):
         settings = self._get_current_range_settings(params, technique)
-        if settings["mode"] == "fixed":
-            selected = settings["fixed"]
+        if settings["mode"] == "auto":
             return [
-                f"set_range ba {selected}",
-                f"set_autoranging ba {selected} {selected}",
+                f"set_range ba {settings['set_range_value']}",
+                f"set_autoranging ba {settings['autorange_min']} {settings['autorange_max']}",
             ]
-        max_range = settings["autorange_max"]
         return [
-            f"set_range ba {max_range}",
-            f"set_autoranging ba {settings['autorange_min']} {max_range}",
+            f"set_range ba {settings['set_range_value']}",
+            f"set_autoranging ba {settings['set_range_value']} {settings['set_range_value']}",
         ]
 
     def _build_cv_script(self) -> str:
         p = self.cv_params
-        begin_v    = float(p["begin_potential"].get())
-        vertex1_v  = float(p["vertex1"].get())
-        vertex2_v  = float(p["vertex2"].get())
         begin      = to_si_string(p["begin_potential"].get(), "V")
         v1         = to_si_string(p["vertex1"].get(),         "V")
         v2         = to_si_string(p["vertex2"].get(),         "V")
@@ -705,12 +741,8 @@ class MethodTab:
 
         parts = [
             "e", "var c", "var p",
-            "set_pgstat_chan 1",
-            "set_pgstat_mode 0",
-            "set_pgstat_chan 0",
             "set_pgstat_mode 2",
-            "set_max_bandwidth 66667m",
-            f"set_range_minmax da {to_si_string(str(min(begin_v, vertex1_v, vertex2_v)), 'V')} {to_si_string(str(max(begin_v, vertex1_v, vertex2_v)), 'V')}",
+            "set_max_bandwidth 40",
         ]
         parts += self._current_range_commands(p, "CV")
         if float(cond_time) > 0:

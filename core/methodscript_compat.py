@@ -1,41 +1,45 @@
 import hashlib
-import re
 from pathlib import Path
 from typing import Optional
 
 
-DISPLAY_CURRENT_RANGE_TO_TOKEN = {
-    "100 nA": "59n",
-    "1 uA": "590n",
-    "2 uA": "1180n",
-    "4 uA": "2360n",
-    "6 uA": "3687500p",
-    "8 uA": "4720n",
-    "13 uA": "7375n",
-    "16 uA": "9440n",
-    "25 uA": "14750n",
-    "32 uA": "18880n",
-    "50 uA": "29500n",
-    "63 uA": "37170n",
-    "100 uA": "59u",
-    "125 uA": "73750n",
-    "200 uA": "118u",
-    "250 uA": "147500n",
-    "500 uA": "295u",
-    "1 mA": "590u",
-    "5 mA": "2950u",
-}
-SUPPORTED_BA_LABELS = tuple(DISPLAY_CURRENT_RANGE_TO_TOKEN.values())
-VALID_BA_TOKENS = set(SUPPORTED_BA_LABELS) | {"489n", "10u", "100u", "2u", "59m"}
-
-_CURRENT_FACTORS = {
-    "a": 1e-18,
-    "f": 1e-15,
-    "p": 1e-12,
-    "n": 1e-9,
-    "u": 1e-6,
-    "m": 1e-3,
-    "": 1.0,
+VALID_BA_TOKENS = {
+    "1n",
+    "59n",
+    "100n",
+    "489n",
+    "590n",
+    "2u",
+    "4u",
+    "8u",
+    "10u",
+    "16u",
+    "32u",
+    "59u",
+    "63u",
+    "100u",
+    "118u",
+    "125u",
+    "250u",
+    "500u",
+    "1m",
+    "5m",
+    "1180n",
+    "2360n",
+    "4720n",
+    "7375n",
+    "9440n",
+    "14750n",
+    "18880n",
+    "29500n",
+    "37170n",
+    "73750n",
+    "147500n",
+    "295u",
+    "590u",
+    "2950u",
+    "3687500p",
+    "59m",
 }
 
 
@@ -49,55 +53,8 @@ def normalized_script_hash(script: str, length: int = 12) -> str:
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:length]
 
 
-def _parse_current_value(label: object) -> Optional[float]:
-    text = str(label or "").strip().replace(" ", "")
-    if not text:
-        return None
-    text = text.replace("A", "")
-    match = re.fullmatch(r"([+-]?\d+(?:\.\d+)?)([afpnum]?)", text)
-    if not match:
-        return None
-    value = float(match.group(1))
-    suffix = match.group(2)
-    return value * _CURRENT_FACTORS[suffix]
-
-
-def normalize_current_range_label(label: object, role: str = "fixed") -> str:
-    text = str(label or "").strip().replace(" ", "")
-    if text in VALID_BA_TOKENS:
-        return text
-    pretty = str(label or "").strip()
-    if pretty in DISPLAY_CURRENT_RANGE_TO_TOKEN:
-        return DISPLAY_CURRENT_RANGE_TO_TOKEN[pretty]
-
-    requested = _parse_current_value(text)
-    if requested is None:
-        raise ValueError(f"Unsupported BA/current-range value: {label}")
-
-    supported = [(item, _parse_current_value(item)) for item in SUPPORTED_BA_LABELS]
-    if role == "fixed":
-        choices = [item for item in supported if item[1] >= requested]
-        return (choices[0] if choices else supported[-1])[0]
-    if role == "autorange_min":
-        choices = [item for item in supported if item[1] <= requested]
-        return (choices[-1] if choices else supported[0])[0]
-    if role == "autorange_max":
-        choices = [item for item in supported if item[1] >= requested]
-        return (choices[0] if choices else supported[-1])[0]
-    return min(supported, key=lambda item: abs(item[1] - requested))[0]
-
-
 def normalize_method_params(params: Optional[dict]) -> dict:
-    cleaned = {str(k): str(v).strip() for k, v in (params or {}).items()}
-    role_by_key = {
-        "current_range_fixed": "fixed",
-        "current_range_autorange_min": "autorange_min",
-        "current_range_autorange_max": "autorange_max",
-    }
-    for key, role in role_by_key.items():
-        if key in cleaned and cleaned[key]:
-            cleaned[key] = normalize_current_range_label(cleaned[key], role=role)
-    return cleaned
+    return {str(k): str(v).strip() for k, v in (params or {}).items()}
 
 
 def score_param_richness(params: Optional[dict]) -> tuple[int, int]:

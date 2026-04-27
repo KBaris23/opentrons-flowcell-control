@@ -1010,17 +1010,61 @@ class RecipeMakerTab:
             return ""
         return " [tip override " + " ".join(bits) + "]"
 
-    @staticmethod
-    def _opentrons_identity(path: Path, protocol_name: str) -> tuple[str, str]:
-        found = opentrons_library_entry_for_path(path)
+    @classmethod
+    def _opentrons_path_for_storage(cls, path: Path) -> str:
+        resolved = Path(path).expanduser().resolve()
+        try:
+            return str(resolved.relative_to(cls._repo_root_for_helpers()))
+        except ValueError:
+            return str(resolved)
+
+    @classmethod
+    def _repo_root_for_helpers(cls) -> Path:
+        return Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def _resolve_recipe_opentrons_protocol_path(cls, protocol_path: str | Path) -> Path | None:
+        raw = Path(protocol_path).expanduser()
+        repo_root = cls._repo_root_for_helpers()
+        candidates: list[Path] = []
+        if raw.is_absolute():
+            candidates.append(raw)
+        else:
+            candidates.append(repo_root / raw)
+            candidates.append(repo_root / OPENTRONS_PROTOCOLS_DIR / raw)
+            candidates.append(repo_root / OPENTRONS_PROTOCOLS_DIR / raw.name)
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve()
+            except Exception:
+                resolved = candidate
+            if resolved.exists():
+                return resolved
+        proto_root = (repo_root / OPENTRONS_PROTOCOLS_DIR).resolve()
+        if proto_root.exists():
+            target_names = {raw.name.lower(), raw.stem.lower(), str(protocol_path).strip().lower()}
+            for candidate in proto_root.rglob("*.py"):
+                name = candidate.name.lower()
+                stem = candidate.stem.lower()
+                if name in target_names or stem in target_names:
+                    try:
+                        return candidate.resolve()
+                    except Exception:
+                        return candidate
+        return None
+
+    @classmethod
+    def _opentrons_identity(cls, path: Path, protocol_name: str) -> tuple[str, str]:
+        resolved_path = cls._resolve_recipe_opentrons_protocol_path(path) or Path(path).expanduser().resolve()
+        found = opentrons_library_entry_for_path(resolved_path)
         if found is None:
-            protocol_id = resolve_protocol_id(protocol_name=protocol_name, filename=path.name)
+            protocol_id = resolve_protocol_id(protocol_name=protocol_name, filename=resolved_path.name)
         else:
             key, entry = found
             protocol_id = resolve_protocol_id(
                 protocol_id=entry.get("protocol_id"),
                 protocol_name=protocol_name,
-                filename=path.name,
+                filename=resolved_path.name,
                 library_key=key,
             )
         return protocol_id, resume_key_for_protocol(protocol_id=protocol_id)
@@ -1062,7 +1106,7 @@ class RecipeMakerTab:
                     "mode": mode,
                     "protocol_name": protocol_name,
                     "protocol_id": protocol_id,
-                    "protocol_path": str(path),
+                    "protocol_path": self._opentrons_path_for_storage(path),
                     "resume_key": resume_key,
                     "supports_pause": bool(summary.has_pause),
                     "robot_host": robot_host,
@@ -1091,7 +1135,7 @@ class RecipeMakerTab:
                 "params": {
                     "protocol_name": protocol_name,
                     "protocol_id": protocol_id,
-                    "protocol_path": str(path),
+                    "protocol_path": self._opentrons_path_for_storage(path),
                     "resume_key": resume_key,
                 },
             },
@@ -1397,17 +1441,20 @@ class RecipeMakerTab:
             protocol_path = str(params.get("protocol_path") or "").strip()
             if not protocol_name or not protocol_path:
                 continue
-            path = Path(protocol_path)
+            resolved_path = cls._resolve_recipe_opentrons_protocol_path(protocol_path)
+            path = resolved_path or Path(protocol_path)
+            stored_protocol_path = cls._opentrons_path_for_storage(path) if resolved_path is not None else protocol_path
             protocol_id, resume_key = cls._opentrons_identity(path, protocol_name)
             old_resume_key = str(params.get("resume_key") or "").strip()
             params["protocol_id"] = protocol_id
             params["resume_key"] = resume_key
+            params["protocol_path"] = stored_protocol_path
             action["params"] = params
             item["opentrons_action"] = action
             protocol_step_info.append(
                 {
                     "protocol_name": protocol_name,
-                    "protocol_path": protocol_path,
+                    "protocol_path": stored_protocol_path,
                     "old_resume_key": old_resume_key,
                     "new_resume_key": resume_key,
                     "protocol_id": protocol_id,
@@ -1488,10 +1535,13 @@ class RecipeMakerTab:
                 resume_key = str(params.get("resume_key") or "").strip()
 
                 if action_name == "PROTOCOL":
+                    resolved_protocol_path = None
                     if not protocol_path:
                         errors.append(f"Row {index}: Opentrons protocol step is missing a protocol path.")
-                    elif not Path(protocol_path).exists():
-                        errors.append(f"Row {index}: Opentrons protocol file was not found: {protocol_path}")
+                    else:
+                        resolved_protocol_path = self._resolve_recipe_opentrons_protocol_path(protocol_path)
+                        if resolved_protocol_path is None:
+                            errors.append(f"Row {index}: Opentrons protocol file was not found: {protocol_path}")
                     if self._resume_key_style(resume_key) == "legacy":
                         warnings.append(f"Row {index}: {protocol_name} still uses a legacy resume key.")
                     if bool(params.get("supports_pause")):
@@ -1502,9 +1552,9 @@ class RecipeMakerTab:
                         right_tip = self._normalize_tip_well(override.get("right_starting_tip"))
                         if not left_tip and not right_tip:
                             errors.append(f"Row {index}: tip override is enabled but no valid left/right tip was set.")
-                        elif protocol_path and Path(protocol_path).exists():
+                        elif resolved_protocol_path is not None:
                             try:
-                                summary = self._opentrons_runner.inspect_protocol(Path(protocol_path))
+                                summary = self._opentrons_runner.inspect_protocol(resolved_protocol_path)
                             except Exception:
                                 summary = None
                             available_mounts = self._instrument_mounts(summary)
@@ -1921,12 +1971,9 @@ class RecipeMakerTab:
             raw = str(path_text or "").strip()
             if not raw:
                 raise ValueError("Select an Opentrons protocol first.")
-            path = Path(raw).expanduser()
-            if not path.is_absolute():
-                path = Path.cwd() / path
-            path = path.resolve()
-            if not path.exists():
-                raise FileNotFoundError(f"Protocol file not found: {path}")
+            path = self._resolve_recipe_opentrons_protocol_path(raw)
+            if path is None:
+                raise FileNotFoundError(f"Protocol file not found: {raw}")
             summary = self._opentrons_runner.inspect_protocol(path)
             protocol_name = str(protocol_name_text or "").strip() or summary.protocol_name or path.stem
             return path, summary, protocol_name
