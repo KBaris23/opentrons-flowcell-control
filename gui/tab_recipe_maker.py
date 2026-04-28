@@ -536,6 +536,8 @@ class RecipeMakerTab:
 
         ttk.Button(top, text="Refresh",
                    command=self._load_method_map).pack(side="left", padx=6)
+        ttk.Button(top, text="Delete Method",
+                   command=self._delete_selected_method_family).pack(side="left", padx=6)
 
         sweep = ttk.Frame(parent)
         sweep.pack(fill="x", padx=6, pady=(0, 4))
@@ -587,13 +589,14 @@ class RecipeMakerTab:
         self._method_tree.column("Technique", width=100)
         self._method_tree.column("Params", width=320)
         self._method_tree.pack(fill="both", expand=True, padx=6, pady=6)
+        self._method_tree.bind("<Double-1>", self._on_method_tree_double_click)
 
         self._load_method_map()
 
         hint = ttk.Label(
             parent,
             text=(
-                "Select a method and use Add Method Step, or configure channels and use "
+                "Double-click a method row to edit its family note. Select a method and use Add Method Step, or configure channels and use "
                 "'Add Channel Sweep Block'."
             ),
             foreground="#666",
@@ -1268,6 +1271,51 @@ class RecipeMakerTab:
         if not entry:
             return None
         return key, entry
+
+    def _on_method_tree_double_click(self, event):
+        row_id = self._method_tree.identify_row(event.y)
+        if not row_id:
+            return
+        self._method_tree.selection_set(row_id)
+        self._edit_selected_method_note()
+
+    def _edit_selected_method_note(self):
+        selected = self._selected_method_entry()
+        if not selected:
+            messagebox.showwarning("No selection", "Select a method from the library list.")
+            return
+        key, entry = selected
+        current = str(entry.get("note", "") or "")
+        updated = simpledialog.askstring(
+            "Edit Method Family Note",
+            "Update note for this method family:",
+            initialvalue=current,
+            parent=self._frame.winfo_toplevel(),
+        )
+        if updated is None:
+            return
+        library_map.update_family_note(key, updated)
+        self._load_method_map()
+
+    def _delete_selected_method_family(self):
+        selected = self._selected_method_entry()
+        if not selected:
+            messagebox.showwarning("No selection", "Select a method from the library list.")
+            return
+        key, _ = selected
+        siblings = library_map.family_keys(key)
+        if not siblings:
+            messagebox.showwarning("Not found", "Selected method family was not found.")
+            self._load_method_map()
+            return
+        if not messagebox.askyesno(
+            "Delete Method Family",
+            f"Delete selected method family and all siblings ({len(siblings)} file(s))?",
+        ):
+            return
+        removed = library_map.delete_family(key)
+        self._load_method_map()
+        messagebox.showinfo("Deleted", f"Removed {removed} method file(s).")
 
     def _add_method_step(self):
         selected = self._selected_method_entry()

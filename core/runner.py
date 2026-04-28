@@ -268,9 +268,10 @@ class SerialMeasurementRunner:
                                 continue
                             self._parse_data_line(text_line)
 
-                        # PalmSens firmware may terminate with a bare "*" line
-                        # instead of an explicit textual completion message.
-                        if text_line in ("*", "Measurement completed", "Script completed"):
+                        # Bare "*" is a loop terminator in MethodSCRIPT and
+                        # should not end the whole run. Only explicit completion
+                        # markers should terminate measurement collection.
+                        if text_line in ("Measurement completed", "Script completed"):
                             self.log("\nMeasurement completed")
                             measurement_completed = True
                             self.partial_packet = ""

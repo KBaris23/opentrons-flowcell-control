@@ -4645,20 +4645,23 @@
     {
       "type": "OPENTRONS_PROTOCOL",
       "status": "pending",
-      "details": "Opentrons ROBOT Titration_Amp0_10_steps.py [pause-aware]",
+      "details": "Opentrons ROBOT Titration_Amp0_10_steps.py [pause-aware] [tip override L=C8 R=A1]",
       "opentrons_action": {
         "name": "PROTOCOL",
         "params": {
           "mode": "robot",
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc",
           "supports_pause": true,
           "robot_host": "169.254.229.52",
           "robot_port": 31950,
           "tip_override": {
-            "enabled": false
+            "enabled": true,
+            "left_starting_tip": "C8",
+            "right_starting_tip": "A1",
+            "require_confirmation": true
           }
         }
       }
@@ -9293,7 +9296,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -13928,7 +13931,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -18563,7 +18566,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -23198,7 +23201,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -27833,7 +27836,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -32468,7 +32471,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -37103,7 +37106,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }
@@ -41738,7 +41741,7 @@
         "params": {
           "protocol_name": "Titration_Amp0_10_steps",
           "protocol_id": "otproto_7d3637d14243aebc",
-          "protocol_path": "C:\\Users\\Asus\\OneDrive\\Documents\\GitHub\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
+          "protocol_path": "C:\\Users\\chienlab\\Desktop\\opentrons-flowcell-control\\opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
           "resume_key": "resume_otproto_7d3637d14243aebc"
         }
       }

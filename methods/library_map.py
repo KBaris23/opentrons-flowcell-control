@@ -78,7 +78,11 @@ def compute_hash(technique: str, params: dict, mux_channel: Optional[int]) -> st
         slug = f"{slug}_ch{mux_channel}"
 
     canonical = json.dumps(
-        {k: str(v).strip() for k, v in sorted(params.items())},
+        {
+            k: str(v).strip()
+            for k, v in sorted(params.items())
+            if str(k).lower() not in {"note", "library_note"}
+        },
         separators=(",", ":"),
     )
     raw = f"{slug}||{canonical}"
@@ -154,6 +158,78 @@ def update_note(hash_key: str, note: Optional[str]) -> bool:
     entry["note"] = new_note
     _persist()
     return True
+
+
+def _family_identity(entry: dict) -> str:
+    technique = str(entry.get("technique", "")).strip().upper()
+    params = entry.get("params", {}) or {}
+    canonical = json.dumps(
+        {k: str(v).strip() for k, v in sorted(params.items())},
+        separators=(",", ":"),
+    )
+    return f"{technique}||{canonical}"
+
+
+def family_keys(hash_key: str) -> list[str]:
+    """Return sibling keys in the same method family (ignores mux channel)."""
+    load_map()
+    entry = _map.get(hash_key)
+    if not entry:
+        return []
+    family_id = _family_identity(entry)
+    keys = [k for k, v in _map.items() if _family_identity(v) == family_id]
+    keys.sort()
+    return keys
+
+
+def update_family_note(hash_key: str, note: Optional[str]) -> int:
+    """Update note on all siblings in the selected family. Returns count changed."""
+    load_map()
+    keys = family_keys(hash_key)
+    if not keys:
+        return 0
+    new_note = (note or "").strip()
+    changed = 0
+    for key in keys:
+        entry = _map.get(key)
+        if entry is None:
+            continue
+        if str(entry.get("note", "")) == new_note:
+            continue
+        entry["note"] = new_note
+        changed += 1
+    if changed:
+        _persist()
+    return changed
+
+
+def delete_family(hash_key: str) -> int:
+    """Delete all siblings in the selected family and their backing .ms files."""
+    load_map()
+    keys = family_keys(hash_key)
+    if not keys:
+        return 0
+
+    removed = 0
+    for key in keys:
+        entry = _map.get(key)
+        if entry is None:
+            continue
+        path_text = entry.get("filepath")
+        if path_text:
+            path = Path(path_text)
+            if path.exists():
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+        if key in _map:
+            del _map[key]
+            removed += 1
+
+    if removed:
+        _persist()
+    return removed
 
 
 def find_by_technique(technique: str) -> dict:
