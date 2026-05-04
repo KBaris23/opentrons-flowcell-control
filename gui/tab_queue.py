@@ -1051,93 +1051,75 @@ class QueueTab:
         else:
             sp = raw.get("script_path")
             method_ref = raw.get("method_ref") or {}
+            technique = method_ref.get("technique") or t
+            params = method_ref.get("params")
+            hash_key = method_ref.get("hash_key")
+            mux = method_ref.get("mux_channel")
+            mux_ch = None
+            if mux not in (None, "", 0, "0"):
+                try:
+                    mux_ch = int(mux)
+                except (TypeError, ValueError):
+                    mux_ch = None
 
             if sp:
-                # Prefer exact library_map entry when provided.
-                hash_key = method_ref.get("hash_key")
-                if hash_key:
-                    resolved = library_map.lookup(hash_key)
-                    if resolved is not None:
-                        sp = str(resolved)
-
-                # Prefer MUX-specific library file if method_ref requests a channel.
-                mux = method_ref.get("mux_channel")
-                mux_ch = None
-                if mux not in (None, "", 0, "0"):
+                # Prefer params-derived identity (most current), then hash fallback.
+                resolved = None
+                if isinstance(params, dict):
                     try:
-                        mux_ch = int(mux)
-                    except (TypeError, ValueError):
-                        mux_ch = None
-
-                if mux_ch is not None and 1 <= mux_ch <= 16:
-                    technique = method_ref.get("technique") or t
-                    params = method_ref.get("params")
-                    resolved = None
-                    if isinstance(params, dict):
-                        try:
-                            mux_key = library_map.compute_hash(technique, params, mux_ch)
-                            resolved = library_map.lookup(mux_key)
-                        except Exception:
-                            resolved = None
-                    if resolved is not None:
-                        sp = str(resolved)
+                        identity_key = library_map.compute_hash(technique, params, mux_ch)
+                        resolved = library_map.lookup(identity_key)
+                    except Exception:
+                        resolved = None
+                if resolved is None and hash_key:
+                    resolved = library_map.lookup(hash_key)
+                if resolved is not None:
+                    sp = str(resolved)
+                    if mux_ch is not None and 1 <= mux_ch <= 16:
                         item["details"] = details or f"{Path(sp).name} (MUX ch {mux_ch})"
 
             if not sp:
-                hash_key = method_ref.get("hash_key")
                 if hash_key:
                     path = library_map.lookup(hash_key)
                     if path is None:
                         return None
-                    mux = method_ref.get("mux_channel")
-                    if mux not in (None, "", 0, "0"):
-                        try:
-                            mux_ch = int(mux)
-                        except (TypeError, ValueError):
-                            mux_ch = None
 
-                        if mux_ch is not None and 1 <= mux_ch <= 16:
-                            technique = method_ref.get("technique") or t
-                            params = method_ref.get("params")
-                            resolved = None
+                    if mux_ch is not None and 1 <= mux_ch <= 16:
+                        resolved = None
+                        if isinstance(params, dict):
+                            try:
+                                mux_key = library_map.compute_hash(technique, params, mux_ch)
+                                resolved = library_map.lookup(mux_key)
+                            except Exception:
+                                resolved = None
 
-                            if isinstance(params, dict):
-                                try:
-                                    mux_key = library_map.compute_hash(technique, params, mux_ch)
-                                    resolved = library_map.lookup(mux_key)
-                                except Exception:
-                                    resolved = None
+                        if resolved is None:
+                            # Fallback: wrap the referenced base script with the requested channel.
+                            try:
+                                base_script = path.read_text(encoding="utf-8")
+                                wrapped = self._wrap_mux(
+                                    self._strip_first_mux_header(base_script),
+                                    mux_ch,
+                                )
+                                mux_note = self._compose_mux_note(
+                                    method_ref=method_ref,
+                                    mux_channel=mux_ch,
+                                    fallback=f"MUX ch {mux_ch}",
+                                )
+                                saved_path, _ = self._session.registry.save_script(
+                                    technique=technique,
+                                    script=wrapped,
+                                    params=params if isinstance(params, dict) else None,
+                                    mux_channel=mux_ch,
+                                    note=mux_note,
+                                )
+                                resolved = saved_path
+                            except Exception as exc:
+                                self.log(f"Failed to generate MUX ch {mux_ch} script from method_ref: {exc}")
+                                return None
 
-                            if resolved is None:
-                                # Fallback: wrap the referenced base script with the requested channel.
-                                try:
-                                    base_script = path.read_text(encoding="utf-8")
-                                    wrapped = self._wrap_mux(
-                                        self._strip_first_mux_header(base_script),
-                                        mux_ch,
-                                    )
-                                    mux_note = self._compose_mux_note(
-                                        method_ref=method_ref,
-                                        mux_channel=mux_ch,
-                                        fallback=f"MUX ch {mux_ch}",
-                                    )
-                                    saved_path, _ = self._session.registry.save_script(
-                                        technique=technique,
-                                        script=wrapped,
-                                        params=params if isinstance(params, dict) else None,
-                                        mux_channel=mux_ch,
-                                        note=mux_note,
-                                    )
-                                    resolved = saved_path
-                                except Exception as exc:
-                                    self.log(f"Failed to generate MUX ch {mux_ch} script from method_ref: {exc}")
-                                    return None
-
-                            sp = str(resolved)
-                            item["details"] = details or f"{Path(sp).name} (MUX ch {mux_ch})"
-                        else:
-                            sp = str(path)
-                            item["details"] = details or path.name
+                        sp = str(resolved)
+                        item["details"] = details or f"{Path(sp).name} (MUX ch {mux_ch})"
                     else:
                         sp = str(path)
                         item["details"] = details or path.name
