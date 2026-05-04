@@ -28,6 +28,25 @@ from .methodscript_compat import validate_ba_tokens_in_script
 from config import DATA_DIR, DEVICE_KEYWORDS, DEVICE_BAUDRATE
 
 
+CSV_FIELD_ORDER = [
+    "potential",
+    "current",
+    "current_forward",
+    "current_reverse",
+    "current_diff",
+    "time_s",
+]
+
+CSV_LABEL_MAP = {
+    "potential": "Potential (V)",
+    "current": "Current (uA)",
+    "current_forward": "Current Forward (uA)",
+    "current_reverse": "Current Reverse (uA)",
+    "current_diff": "Current Diff (uA)",
+    "time_s": "Time (s)",
+}
+
+
 def format_port_info(port) -> str:
     """Return a compact, user-facing summary for a serial port."""
     details = []
@@ -316,6 +335,8 @@ class SerialMeasurementRunner:
                     if self.invert_current:
                         current_amp = -current_amp
                     currents.append(current_amp * 1e6)   # A -> uA
+                elif var.id == "eb":
+                    point["time_s"] = var.value
 
             if currents:
                 if len(currents) >= 3:
@@ -373,23 +394,18 @@ class SerialMeasurementRunner:
         csv_path = self.data_folder / f"{base}_{tag}.csv"
 
         with open(csv_path, "w", newline="") as fh:
-            fieldnames = ["potential", "current"]
-            label_map = {
-                "potential": "Potential (V)",
-                "current": "Current (uA)",
+            present_fields = {
+                key
+                for point in self.data_points
+                for key, value in point.items()
+                if value is not None
             }
-            if any("current_forward" in dp for dp in self.data_points):
-                fieldnames.append("current_forward")
-                label_map["current_forward"] = "Current Forward (uA)"
-            if any("current_reverse" in dp for dp in self.data_points):
-                fieldnames.append("current_reverse")
-                label_map["current_reverse"] = "Current Reverse (uA)"
-            if any("current_diff" in dp for dp in self.data_points):
-                fieldnames.append("current_diff")
-                label_map["current_diff"] = "Current Diff (uA)"
+            fieldnames = [name for name in CSV_FIELD_ORDER if name in present_fields]
+            if not fieldnames:
+                fieldnames = ["potential", "current"]
 
             writer = csv.DictWriter(fh, fieldnames=fieldnames)
-            writer.writerow({key: label_map.get(key, key) for key in fieldnames})
+            writer.writerow({key: CSV_LABEL_MAP.get(key, key) for key in fieldnames})
             writer.writerows(self.data_points)
 
         self.log(f"\nData saved to: {csv_path}")

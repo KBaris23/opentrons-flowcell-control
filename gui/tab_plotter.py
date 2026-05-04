@@ -56,6 +56,8 @@ class PlotterTab:
         self._live_job          = None
         self._plot_line         = None
         self._plotted_files     = []
+        self._live_x_label      = "Potential (V)"
+        self._live_y_label      = "Current (uA)"
 
         # Colour cycle (independent from session — plotter owns it)
         _colors = (
@@ -121,8 +123,8 @@ class PlotterTab:
 
     def _reset_axes(self, title: str = "Voltammogram"):
         self._ax.set_title(title)
-        self._ax.set_xlabel("Potential (V)")
-        self._ax.set_ylabel("Current (uA)")
+        self._ax.set_xlabel(self._live_x_label)
+        self._ax.set_ylabel(self._live_y_label)
         self._ax.grid(visible=True, which="major", linestyle="-")
         self._ax.grid(visible=True, which="minor", linestyle="--", alpha=0.2)
         self._ax.minorticks_on()
@@ -138,23 +140,30 @@ class PlotterTab:
             if path:
                 self.plot_data(path)
 
-    def plot_data(self, csv_path, color=None, label=None, track: bool = True, allow_overlay: bool = True):
+    def plot_data(
+        self,
+        csv_path,
+        color=None,
+        label=None,
+        track: bool = True,
+        allow_overlay: bool = True,
+        show_error: bool = True,
+    ):
         """Load a CSV and add it to the plot."""
         try:
             df = self._read_csv(csv_path)
         except Exception as exc:
             self._session.log(f"Plot error: failed to read {csv_path}: {exc}")
-            messagebox.showerror("Plot Error", f"Failed to read data:\n{exc}")
+            if show_error:
+                messagebox.showerror("Plot Error", f"Failed to read data:\n{exc}")
             return
 
-        pot_col = self._find_column(
-            df,
-            ("Potential (V)", "Potential(V)", "E (V)", "E(V)", "Potential"),
-        )
-        if not pot_col:
-            msg = "CSV must contain a potential column (e.g. 'Potential (V)')."
+        x_col, x_label = self._resolve_x_axis(df)
+        if not x_col:
+            msg = "CSV must contain a supported X-axis column (Potential or Time)."
             self._session.log(f"Plot error: {msg}")
-            messagebox.showerror("Plot Error", msg)
+            if show_error:
+                messagebox.showerror("Plot Error", msg)
             return
 
         series_choice = getattr(self, "_plot_series_var", None)
@@ -165,13 +174,18 @@ class PlotterTab:
         except ValueError as exc:
             msg = f"{exc}"
             self._session.log(f"Plot error: {msg}")
-            messagebox.showerror("Plot Error", msg)
+            if show_error:
+                messagebox.showerror("Plot Error", msg)
             return
 
         try:
             if not allow_overlay or not self._overlay_var.get():
                 self._ax.clear()
                 self._reset_axes()
+                if track:
+                    self._plotted_files.clear()
+            self._live_x_label = x_label
+            self._live_y_label = y_label
             if color is None:
                 color = next(self._color_cycle)
             base_label = label or Path(csv_path).name
@@ -183,8 +197,9 @@ class PlotterTab:
                 for line in list(self._ax.lines):
                     if line.get_label() == label:
                         line.remove()
-            self._ax.plot(df[pot_col], y_values, color=color, label=label)
+            self._ax.plot(df[x_col], y_values, color=color, label=label)
             self._reset_axes()
+            self._ax.set_xlabel(x_label)
             self._ax.set_ylabel(y_label)
             self._legend = self._ax.legend(loc="best")
             if self._legend is not None:
@@ -195,9 +210,12 @@ class PlotterTab:
                 self._remember_plotted_file(csv_path, color, base_label)
         except Exception as exc:
             self._session.log(f"Plot render error: {exc}")
-            messagebox.showerror("Plot Error", f"Failed to render plot:\n{exc}")
+            if show_error:
+                messagebox.showerror("Plot Error", f"Failed to render plot:\n{exc}")
     def clear_plot(self):
         self._ax.clear()
+        self._live_x_label = "Potential (V)"
+        self._live_y_label = "Current (uA)"
         self._reset_axes()
         self._color_cycle  = itertools.cycle(self._colors)
         self._plot_line    = None
@@ -219,6 +237,8 @@ class PlotterTab:
         self._live_active = True
         self._plot_line   = None
         self._ax.clear()
+        self._live_x_label = "Potential (V)"
+        self._live_y_label = "Current (uA)"
 
         if color is None:
             color = next(self._color_cycle)
@@ -255,11 +275,13 @@ class PlotterTab:
         series_choice = getattr(self, "_plot_series_var", None)
         series_choice = series_choice.get() if series_choice else "Auto"
         value = self._resolve_live_value(data_point, series_choice)
-        if value is None:
+        x_value, x_label = self._resolve_live_x_value(data_point)
+        y_label = self._resolve_live_y_label(data_point, series_choice)
+        if value is None or x_value is None:
             return
         try:
-            self._live_queue.put_nowait((data_point["potential"], value))
-        except (queue.Full, KeyError):
+            self._live_queue.put_nowait((x_value, value, x_label, y_label))
+        except queue.Full:
             pass
 
     def _poll(self):
@@ -270,11 +292,13 @@ class PlotterTab:
         updated = False
         while True:
             try:
-                pot, cur = self._live_queue.get_nowait()
+                x_val, y_val, x_label, y_label = self._live_queue.get_nowait()
             except queue.Empty:
                 break
-            self._live_x.append(pot)
-            self._live_y.append(cur)
+            self._live_x.append(x_val)
+            self._live_y.append(y_val)
+            self._live_x_label = x_label
+            self._live_y_label = y_label
             updated = True
 
         if updated:
@@ -284,6 +308,8 @@ class PlotterTab:
                 )
             else:
                 self._plot_line.set_data(self._live_x, self._live_y)
+            self._ax.set_xlabel(self._live_x_label)
+            self._ax.set_ylabel(self._live_y_label)
             # Autoscale less often to avoid UI slowdowns on dense streams.
             n = len(self._live_x)
             if n <= 50 or (n % 200 == 0):
@@ -328,6 +354,20 @@ class PlotterTab:
             if nc in norm_map:
                 return norm_map[nc]
         return None
+
+    def _resolve_x_axis(self, df):
+        potential_col = self._find_column(
+            df,
+            ("Potential (V)", "Potential(V)", "E (V)", "E(V)", "Potential"),
+        )
+        if potential_col:
+            return potential_col, "Potential (V)"
+
+        time_col = self._find_column(df, ("Time (s)", "Time"))
+        if time_col:
+            return time_col, "Time (s)"
+
+        return None, None
 
     def _resolve_plot_series(self, df, series_choice):
         current_col = self._find_column(
@@ -414,9 +454,9 @@ class PlotterTab:
 
     def _on_series_change(self, _event=None):
         y_label = self._plot_series_var.get()
-        if y_label in ("Auto", ""):
-            y_label = "Current (uA)"
-        self._ax.set_ylabel(y_label)
+        if y_label not in ("Auto", ""):
+            self._live_y_label = y_label
+        self._ax.set_ylabel(self._live_y_label)
         if self._live_active:
             self._canvas.draw_idle()
             return
@@ -443,8 +483,19 @@ class PlotterTab:
         files = list(self._plotted_files)
         self._ax.clear()
         self._reset_axes()
+        kept = []
         for entry in files:
-            self.plot_data(entry["path"], color=entry["color"], label=entry["label"], track=False)
+            before = len(self._ax.lines)
+            self.plot_data(
+                entry["path"],
+                color=entry["color"],
+                label=entry["label"],
+                track=False,
+                show_error=False,
+            )
+            if len(self._ax.lines) > before:
+                kept.append(entry)
+        self._plotted_files = kept
         if self._legend is not None:
             self._legend.set_draggable(True)
 
@@ -464,6 +515,24 @@ class PlotterTab:
 
         # Auto or "Current (uA)"
         return data_point.get("current")
+
+    @staticmethod
+    def _resolve_live_x_value(data_point: dict):
+        for key, label in (
+            ("potential", "Potential (V)"),
+            ("time_s", "Time (s)"),
+        ):
+            if key in data_point:
+                return data_point.get(key), label
+        return None, None
+
+    @staticmethod
+    def _resolve_live_y_label(data_point: dict, series_choice: str) -> str:
+        if series_choice and series_choice != "Auto":
+            return series_choice
+        if "current" in data_point or "current_diff" in data_point:
+            return "Current (uA)"
+        return "Value"
     def _get_data_bounds(self):
         """Return (x_min, x_max, y_min, y_max) across all plotted lines, or None."""
         x_min = x_max = y_min = y_max = None

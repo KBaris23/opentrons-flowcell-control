@@ -191,4 +191,15 @@ def to_si_string(value_str: str, unit: str = "V") -> str:
     if unit == "Hz":
         return f"{int(val)}" if float(val).is_integer() else f"{val:g}"
 
+    if unit == "s":
+        if val == 0:
+            return "0"
+        if abs(val) >= 1:
+            return f"{int(val)}" if float(val).is_integer() else f"{val:g}"
+        milli = val * 1_000.0
+        formatted = f"{milli:.12f}".rstrip("0").rstrip(".")
+        if formatted in ("", "-0", "+0"):
+            formatted = "0"
+        return f"{formatted}m"
+
     return value_str  # fallback
