@@ -81,6 +81,8 @@ class QueueTab:
         self._opentrons_paused_runs: dict[str, dict] = {}
         self._active_opentrons_target: dict[str, str | int | None] | None = None
         self._preconfirmed_opentrons_indices: set[int] = set()
+        self._opentrons_left_unhomed_after_stop = False
+        self._pump_recovery_needed = False
 
         self._build()
         self._session.register_collection_state_listener(self._schedule_refresh_labels)
@@ -239,6 +241,15 @@ class QueueTab:
             session_mgr.log(msg)
             return
         self._append_log_gui(msg)
+
+    def _notify_slack(self, msg: str) -> None:
+        session_mgr = getattr(self._session, "session_manager", None)
+        if session_mgr is None:
+            return
+        try:
+            session_mgr.notify_slack(msg)
+        except Exception:
+            pass
 
     def _append_log_gui(self, msg: str):
         def _append():
@@ -1398,6 +1409,25 @@ class QueueTab:
     def stop_queue(self):
         queue_was_running = bool(self._session.is_running)
         self.log("Queue stop requested.")
+        queue_has_opentrons = self._queue_contains_opentrons()
+        known_opentrons_run = self._has_known_opentrons_run()
+        home_opentrons = False
+        if queue_has_opentrons:
+            home_opentrons = messagebox.askyesno(
+                "Home OT-2?",
+                "This queue contains Opentrons steps.\n\n"
+                "Home the OT-2 after stopping?\n\n"
+                "Choose No to keep paused OT-2 runs available for resume steps.",
+            )
+            self._opentrons_left_unhomed_after_stop = (not home_opentrons) and known_opentrons_run
+            if home_opentrons:
+                self.log("Queue stop: OT-2 homing requested.")
+            elif known_opentrons_run:
+                self.log("Queue stop: OT-2 homing skipped; paused runs will be left available for resume.")
+            else:
+                self.log("Queue stop: OT-2 homing skipped; no active or paused OT-2 run is currently tracked.")
+        else:
+            self._opentrons_left_unhomed_after_stop = False
         self._session.is_running = False
         self._preconfirmed_opentrons_indices.clear()
         self._session.stop_current_runner()
@@ -1407,11 +1437,28 @@ class QueueTab:
         # Always try to force pump out of motion on stop. Run in background to
         # keep the UI responsive if serial calls take up to timeout.
         threading.Thread(target=self._force_stop_and_restart_pump, daemon=True).start()
-        threading.Thread(target=self._stop_and_home_opentrons, daemon=True).start()
+        if queue_has_opentrons and home_opentrons:
+            threading.Thread(target=self._stop_and_home_opentrons, daemon=True).start()
 
         if not queue_was_running:
             self._session.update_queue_status(state="stopped")
             self.set_status("Queue Stopped")
+
+    def _queue_contains_opentrons(self) -> bool:
+        return any(
+            str((item or {}).get("type") or "").upper().startswith("OPENTRONS_")
+            or bool((item or {}).get("opentrons_action"))
+            for item in self._session.measurement_queue
+        )
+
+    def _has_known_opentrons_run(self) -> bool:
+        active = self._active_opentrons_target or {}
+        if str(active.get("robot_host") or "").strip():
+            return True
+        return any(
+            str((paused or {}).get("robot_host") or "").strip()
+            for paused in self._opentrons_paused_runs.values()
+        )
 
     def _force_stop_and_restart_pump(self) -> None:
         ctrl = self._pump_ctrl
@@ -1438,6 +1485,7 @@ class QueueTab:
                 if resp:
                     self.log(f"Pump <- {resp}")
                 self.log("Queue stop: pump restart sent.")
+                self._pump_recovery_needed = False
             except Exception as exc:
                 self.log(f"Queue stop: pump restart failed: {exc}")
         finally:
@@ -1486,7 +1534,11 @@ class QueueTab:
             else:
                 runner.stop_active_runs(robot_host=host, robot_port=port)
                 time.sleep(1.0)
-            runner.home_robot(robot_host=host, robot_port=port)
+            homed = runner.home_robot(robot_host=host, robot_port=port)
+            if homed:
+                self._notify_slack(f"OT-2 homed after queue stop: {host}:{port}.")
+            else:
+                self._notify_slack(f"OT-2 home failed after queue stop: {host}:{port}.")
 
         self._opentrons_paused_runs.clear()
         self._active_opentrons_target = None
@@ -1598,6 +1650,8 @@ class QueueTab:
                 self.log(f"CRITICAL ERROR in queue: {exc}")
 
             self._log_queue_item_outcome(i, item)
+            if not success:
+                self._pump_recovery_needed = True
             if csv_path:
                 self._root.after(0, self._plotter.plot_data, csv_path,
                                  self._session.last_live_plot_color, None, True, False)
@@ -1699,6 +1753,12 @@ class QueueTab:
             f"failed={failed}, stopped={stopped}, paused={paused}. "
             f"Session={session_name}; Experiment={experiment_name}."
         )
+        if self._opentrons_left_unhomed_after_stop:
+            pending = len(self._opentrons_paused_runs)
+            msg += (
+                " OT-2 was not homed after stop"
+                + (f"; {pending} paused run(s) remain available for resume." if pending else ".")
+            )
         try:
             session_mgr.log(msg)
         except Exception:
@@ -2053,6 +2113,9 @@ class QueueTab:
 
         self.log(f"Queue pump -> {details}")
         try:
+            if self._pump_recovery_needed:
+                self._recover_pump_after_failure("before pump action")
+
             if name not in {"STATUS", "STATUS_PORT"}:
                 try:
                     prep = self._pump_ctrl.status_port()
@@ -2068,6 +2131,7 @@ class QueueTab:
                 resp = self._pump_ctrl.send(cmd)
                 if resp:
                     self.log(f"Pump <- {resp}")
+                self._pump_recovery_needed = False
                 return True
 
             if name == "APPLY":
@@ -2077,6 +2141,7 @@ class QueueTab:
                 self._pump_ctrl.set_volume(float(params["volume"]))
                 self._pump_ctrl.set_mode(str(params["mode"]))
                 self.log("Pump APPLY executed (parameters only, no movement).")
+                self._pump_recovery_needed = False
                 return True
 
             if name == "HEXW2":
@@ -2136,6 +2201,8 @@ class QueueTab:
                 if bool(params.get("start", False)):
                     if not self._ensure_pump_started(run_kwargs):
                         self.log("Pump run did not start (status stayed complete/idle).")
+                        self._pump_recovery_needed = True
+                        self._recover_pump_after_failure("after pump start failure")
                         return False
                     ok = self._wait_for_pump_complete(params)
                     if ok and collection_info is not None:
@@ -2151,30 +2218,75 @@ class QueueTab:
                             f"{format_ml_from_ul(self._session.collection_capacity_ul)}"
                         )
                         self._root.after(0, self.refresh_labels)
+                    if ok:
+                        self._pump_recovery_needed = False
+                    else:
+                        self._pump_recovery_needed = True
+                        self._recover_pump_after_failure("after pump wait failure")
                     return ok
+                self._pump_recovery_needed = False
                 return True
 
             if name == "STATUS":
                 resp = self._pump_ctrl.status()
                 self._log_pump_status("status", resp)
+                self._pump_recovery_needed = False
                 return True
             if name == "STATUS_PORT":
                 resp = self._pump_ctrl.status_port()
                 self._log_pump_status("status port", resp)
+                self._pump_recovery_needed = False
                 return True
             if name == "START":
                 self._pump_ctrl.start()
+                self._pump_recovery_needed = False
                 return True
             if name == "PAUSE":
-                self._pump_ctrl.pause(); return True
+                self._pump_ctrl.pause()
+                self._pump_recovery_needed = False
+                return True
             if name == "STOP":
-                self._pump_ctrl.stop(); return True
+                self._pump_ctrl.stop()
+                self._pump_recovery_needed = False
+                return True
             if name == "RESTART":
-                self._pump_ctrl.restart(); return True
+                self._pump_ctrl.restart()
+                self._pump_recovery_needed = False
+                return True
 
-            self.log(f"Unsupported pump action: {name}"); return False
+            self.log(f"Unsupported pump action: {name}")
+            self._pump_recovery_needed = True
+            return False
         except Exception as exc:
-            self.log(f"Pump action failed: {exc}"); return False
+            self.log(f"Pump action failed: {exc}")
+            self._pump_recovery_needed = True
+            self._recover_pump_after_failure("after pump action failure")
+            return False
+
+    def _recover_pump_after_failure(self, context: str) -> None:
+        ctrl = self._pump_ctrl
+        if ctrl is None or not getattr(ctrl, "connected", False):
+            return
+        self.log(f"Pump recovery ({context}): status-port, stop, restart.")
+        try:
+            prep = ctrl.status_port()
+            self._log_pump_status("status port (recover)", prep)
+        except Exception as exc:
+            self.log(f"Pump recovery status-port failed: {exc}")
+        try:
+            resp = ctrl.stop()
+            if resp:
+                self.log(f"Pump <- {resp}")
+        except Exception as exc:
+            self.log(f"Pump recovery stop failed: {exc}")
+        try:
+            resp = ctrl.restart()
+            if resp:
+                self.log(f"Pump <- {resp}")
+            self.log("Pump recovery restart sent.")
+            self._pump_recovery_needed = False
+        except Exception as exc:
+            self.log(f"Pump recovery restart failed: {exc}")
 
     def _exec_opentrons(self, item: dict, queue_index: int | None = None) -> str:
         action_info = item.get("opentrons_action") or {}
@@ -2352,7 +2464,12 @@ class QueueTab:
             return "failed"
 
         runner = OpentronsProtocolRunner(log_callback=self.log)
-        return "completed" if runner.home_robot(robot_host=robot_host, robot_port=robot_port) else "failed"
+        homed = runner.home_robot(robot_host=robot_host, robot_port=robot_port)
+        if homed:
+            self._notify_slack(f"OT-2 home step completed: {robot_host}:{robot_port}.")
+        else:
+            self._notify_slack(f"OT-2 home step failed: {robot_host}:{robot_port}.")
+        return "completed" if homed else "failed"
 
     def _exec_misc(self, item: dict) -> bool:
         action_info = item.get("misc_action") or {}
