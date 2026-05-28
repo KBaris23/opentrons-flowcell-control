@@ -3,9 +3,9 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-if (-not (Test-Path ".venv\\Scripts\\python.exe")) {
-  throw "Missing .venv. Run scripts\\setup_venv.ps1 first."
+$bash = Get-Command bash.exe -ErrorAction SilentlyContinue
+if (-not $bash) {
+  throw "Could not find bash.exe. Install Git for Windows, then run this again."
 }
 
-& .venv\\Scripts\\python.exe main.py
-
+& $bash.Source (Join-Path $PSScriptRoot "launch_gui.sh")

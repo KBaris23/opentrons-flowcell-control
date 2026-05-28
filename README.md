@@ -2,6 +2,14 @@
 
 ## Run
 
+Double-click `Launch Opentrons Flowcell Control.cmd`.
+
+The launcher can be kept inside this folder or copied one folder above `opentrons-flowcell-control`, such as onto a Desktop that contains the app folder. It uses Bash, creates `.venv`, and installs `requirements.txt` automatically the first time it runs.
+
+Bash workflow:
+- `bash scripts/launch_gui.sh`
+
+Manual Python workflow:
 1. Install dependencies:
    - `pip install -r requirements.txt`
 2. Start the GUI:
