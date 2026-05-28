@@ -5,6 +5,7 @@
 Double-click `Launch Opentrons Flowcell Control.cmd`.
 
 The launcher can be kept inside this folder or copied one folder above `opentrons-flowcell-control`, such as onto a Desktop that contains the app folder. It uses Bash, creates `.venv`, and installs `requirements.txt` automatically the first time it runs.
+If `.env` or `.env.local` exists in the repo root, launchers will load them automatically before startup.
 
 Bash workflow:
 - `bash scripts/launch_gui.sh`
