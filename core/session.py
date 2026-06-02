@@ -59,6 +59,13 @@ class SessionState:
             "current_index": None,
             "total": None,
             "current_label": None,
+            "queue_start_index": None,
+            "active_queue_index": None,
+            "next_queue_index": None,
+            "active_step_started_at": None,
+            "active_step_estimated_seconds": None,
+            "active_step_type": None,
+            "active_step_details": None,
             "started_at": None,
             "updated_at": None,
         }

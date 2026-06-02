@@ -175,12 +175,15 @@ class SlackBotServer:
         label = status.get("current_label")
         session_name = status.get("session_name")
         experiment_name = status.get("experiment_name")
+        eta_text = status.get("slack_eta_text")
 
-        msg = f"Queue status: {state}"
-        if idx and total:
-            msg += f" | step {idx}/{total}"
-        if label:
-            msg += f" | {label}"
+        msg = str(eta_text).strip() if eta_text else ""
+        if not msg:
+            msg = f"Queue status: {state}"
+            if idx and total:
+                msg += f" | step {idx}/{total}"
+            if label:
+                msg += f" | {label}"
         if session_name or experiment_name:
             msg += f"\nSession={session_name or '(none)'}; Experiment={experiment_name or '(none)'}"
 

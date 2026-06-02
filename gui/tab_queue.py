@@ -42,6 +42,13 @@ from core.pump_step_utils import (
     rate_for_target_eta,
     volume_to_ul,
 )
+from core.queue_eta import (
+    estimate_item_seconds,
+    estimate_queue_eta,
+    estimate_running_queue_eta,
+    format_live_eta_text,
+    format_static_eta_text,
+)
 from methods import library_map
 from core.session import SessionState
 from robot import OpentronsProtocolRunner
@@ -106,6 +113,7 @@ class QueueTab:
         ttk.Button(ctrl, text="▶ Run Queue",       command=self.run_queue).pack(side="left", padx=4)
         ttk.Button(ctrl, text="▶ From Selected",   command=self.run_from_selected).pack(side="left", padx=4)
         ttk.Button(ctrl, text="⏹ Stop",            command=self.stop_queue).pack(side="left", padx=4)
+        ttk.Button(ctrl, text="Queue ETA",         command=self.show_queue_eta).pack(side="left", padx=4)
         ttk.Separator(ctrl, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(ctrl, text="💾 Save",            command=self.save_queue).pack(side="left", padx=4)
         ttk.Button(ctrl, text="📂 Load",            command=self.load_queue).pack(side="left", padx=4)
@@ -250,6 +258,71 @@ class QueueTab:
             session_mgr.notify_slack(msg)
         except Exception:
             pass
+
+    def show_queue_eta(self):
+        text = self.get_queue_eta_text(include_selection=True)
+        messagebox.showinfo("Queue ETA", text)
+
+    def get_slack_eta_text(self) -> str:
+        return self.get_queue_eta_text(include_selection=False)
+
+    def get_queue_eta_text(self, *, include_selection: bool = True) -> str:
+        queue = list(self._session.measurement_queue)
+        if not queue:
+            return "Queue is empty."
+
+        step_delay = getattr(self._session, "step_delay", 0.0) or 0.0
+        selected = self._selected_indices() if include_selection else []
+        selected_start = selected[0] if selected else None
+
+        status = self._session.get_queue_status()
+        running = bool(self._session.is_running) and str(status.get("state") or "").lower() == "running"
+        if running:
+            active_started = status.get("active_step_started_at")
+            try:
+                elapsed = max(0.0, time.time() - float(active_started))
+            except Exception:
+                elapsed = 0.0
+            active_est = status.get("active_step_estimated_seconds")
+            try:
+                active_est = None if active_est is None else float(active_est)
+            except Exception:
+                active_est = None
+            next_index = status.get("next_queue_index")
+            try:
+                next_index = int(next_index)
+            except Exception:
+                next_index = len(queue)
+            live_eta = estimate_running_queue_eta(
+                queue,
+                next_index=next_index,
+                current_step_elapsed_seconds=elapsed,
+                current_step_estimated_seconds=active_est,
+                step_delay_seconds=step_delay,
+                include_next_step_delay=bool(status.get("active_step_type") != "STEP_DELAY"),
+                current_step_type=str(status.get("active_step_type") or ""),
+            )
+            text = format_live_eta_text(
+                live_eta,
+                current_index=int(status.get("current_index") or 0),
+                total=int(status.get("total") or len(queue)),
+                current_label=str(status.get("current_label") or status.get("active_step_details") or ""),
+            )
+            if selected_start is not None:
+                static_eta = estimate_queue_eta(
+                    queue,
+                    start_index=selected_start,
+                    step_delay_seconds=step_delay,
+                    scope=f"selected row {selected_start + 1} onward",
+                )
+                text += "\n\n" + format_static_eta_text(static_eta)
+            return text
+
+        start = selected_start if selected_start is not None else 0
+        scope = f"selected row {start + 1} onward" if selected_start is not None else "entire queue"
+        return format_static_eta_text(
+            estimate_queue_eta(queue, start_index=start, step_delay_seconds=step_delay, scope=scope)
+        )
 
     def _append_log_gui(self, msg: str):
         def _append():
@@ -1278,6 +1351,13 @@ class QueueTab:
             current_index=0,
             total=len(self._session.measurement_queue),
             current_label="(starting)",
+            queue_start_index=0,
+            active_queue_index=None,
+            next_queue_index=0,
+            active_step_started_at=time.time(),
+            active_step_estimated_seconds=None,
+            active_step_type=None,
+            active_step_details=None,
             started_at=datetime.now().isoformat(timespec="seconds"),
         )
         self.refresh_labels()
@@ -1327,6 +1407,13 @@ class QueueTab:
             current_index=0,
             total=len(self._session.measurement_queue) - idx,
             current_label="(starting)",
+            queue_start_index=idx,
+            active_queue_index=None,
+            next_queue_index=idx,
+            active_step_started_at=time.time(),
+            active_step_estimated_seconds=None,
+            active_step_type=None,
+            active_step_details=None,
             started_at=datetime.now().isoformat(timespec="seconds"),
         )
         self.refresh_labels()
@@ -1431,7 +1518,7 @@ class QueueTab:
         self._session.is_running = False
         self._preconfirmed_opentrons_indices.clear()
         self._session.stop_current_runner()
-        self._session.update_queue_status(state="stopping")
+        self._session.update_queue_status(state="stopping", active_step_type="STOPPING")
         self.set_status("Queue Stopping")
 
         # Always try to force pump out of motion on stop. Run in background to
@@ -1441,7 +1528,15 @@ class QueueTab:
             threading.Thread(target=self._stop_and_home_opentrons, daemon=True).start()
 
         if not queue_was_running:
-            self._session.update_queue_status(state="stopped")
+            self._session.update_queue_status(
+                state="stopped",
+                active_queue_index=None,
+                next_queue_index=None,
+                active_step_started_at=None,
+                active_step_estimated_seconds=None,
+                active_step_type=None,
+                active_step_details=None,
+            )
             self.set_status("Queue Stopped")
 
     def _queue_contains_opentrons(self) -> bool:
@@ -1489,7 +1584,15 @@ class QueueTab:
             except Exception as exc:
                 self.log(f"Queue stop: pump restart failed: {exc}")
         finally:
-            self._session.update_queue_status(state="stopped")
+            self._session.update_queue_status(
+                state="stopped",
+                active_queue_index=None,
+                next_queue_index=None,
+                active_step_started_at=None,
+                active_step_estimated_seconds=None,
+                active_step_type=None,
+                active_step_details=None,
+            )
             self._root.after(0, self.set_status, "Queue Stopped")
 
     def _stop_and_home_opentrons(self) -> None:
@@ -1553,11 +1656,20 @@ class QueueTab:
             self._root.after(0, self.refresh)
             self._root.after(0, self.set_status,
                              f"Running: {item['type']} — {item.get('details', '')}")
+            active_step_type = str(item.get("type") or "").upper()
+            active_step_details = item.get("details") or item.get("type") or ""
             self._session.update_queue_status(
                 state="running",
                 current_index=(i - start_index + 1),
                 total=len(queue) - start_index,
-                current_label=(item.get("details") or item.get("type") or ""),
+                current_label=active_step_details,
+                queue_start_index=start_index,
+                active_queue_index=i,
+                next_queue_index=i + 1,
+                active_step_started_at=time.time(),
+                active_step_estimated_seconds=estimate_item_seconds(item),
+                active_step_type=active_step_type,
+                active_step_details=active_step_details,
             )
             self.log(f"Queue start -> {item.get('details', item.get('type'))}")
 
@@ -1658,11 +1770,33 @@ class QueueTab:
             self._root.after(0, self.refresh)
             step_delay = getattr(self._session, "step_delay", 0.0) or 0.0
             if step_delay > 0 and i < len(queue) - 1:
+                self._session.update_queue_status(
+                    state="running",
+                    current_index=(i - start_index + 1),
+                    total=len(queue) - start_index,
+                    current_label=f"Delay before row {i + 2}",
+                    queue_start_index=start_index,
+                    active_queue_index=i,
+                    next_queue_index=i + 1,
+                    active_step_started_at=time.time(),
+                    active_step_estimated_seconds=step_delay,
+                    active_step_type="STEP_DELAY",
+                    active_step_details=f"Delay before row {i + 2}",
+                )
                 if not self._exec_pause(step_delay):
                     break
 
         self._session.is_running = False
         self._preconfirmed_opentrons_indices.clear()
+        self._session.update_queue_status(
+            state="idle",
+            active_queue_index=None,
+            next_queue_index=None,
+            active_step_started_at=None,
+            active_step_estimated_seconds=None,
+            active_step_type=None,
+            active_step_details=None,
+        )
         self.log("Queue execution loop finished.")
         self._root.after(0, self.set_status, "Queue Complete")
         self._announce_queue_end(start_index=start_index)

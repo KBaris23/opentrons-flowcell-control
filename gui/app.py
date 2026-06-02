@@ -214,6 +214,10 @@ class ElectrochemGUI:
         if SLACK_ENABLE and SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
             def _status_provider():
                 status = self._session.get_queue_status()
+                try:
+                    status["slack_eta_text"] = self._queue_tab.get_slack_eta_text()
+                except Exception:
+                    status["slack_eta_text"] = None
                 status["session_name"] = (
                     self._session_mgr.current_session_path.name
                     if self._session_mgr.current_session_path is not None
