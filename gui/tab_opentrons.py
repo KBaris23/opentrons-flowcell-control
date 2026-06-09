@@ -581,6 +581,7 @@ class OpentronsTab:
         self._step_location_var = tk.StringVar(value="top")
         self._step_new_tip_var = tk.StringVar(value="once")
         self._step_pipette_key_var = tk.StringVar(value="primary")
+        self._step_auto_tip_var = tk.BooleanVar(value=True)
         self._step_repetitions_var = tk.StringVar(value="3")
         self._step_seconds_var = tk.StringVar(value="1")
         self._step_comment_var = tk.StringVar(value="")
@@ -613,15 +614,22 @@ class OpentronsTab:
         ttk.Entry(controls, textvariable=self._step_comment_var).grid(
             row=3,
             column=2,
-            columnspan=6,
+            columnspan=4,
             padx=2,
             pady=2,
             sticky="ew",
         )
+        ttk.Checkbutton(
+            controls,
+            text="Auto tip memory for pick/drop",
+            variable=self._step_auto_tip_var,
+        ).grid(row=3, column=6, columnspan=2, padx=2, pady=2, sticky="w")
 
         step_btns = ttk.Frame(controls)
         step_btns.grid(row=4, column=0, columnspan=8, padx=2, pady=(4, 2), sticky="w")
         ttk.Button(step_btns, text="Add Step", command=self._add_step).pack(side="left", padx=2)
+        ttk.Button(step_btns, text="Insert Before", command=self._insert_step_before_selected).pack(side="left", padx=2)
+        ttk.Button(step_btns, text="Insert After", command=self._insert_step_after_selected).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Update Selected", command=self._update_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Delete Step", command=self._delete_step).pack(side="left", padx=2)
         ttk.Button(step_btns, text="Clear Steps", command=self._clear_steps).pack(side="left", padx=2)
@@ -652,11 +660,19 @@ class OpentronsTab:
         self._step_tree.bind("<Control-c>", lambda _event: self._copy_selected_steps())
         self._step_tree.bind("<Control-v>", lambda _event: self._paste_steps_after_selected())
         self._step_tree.bind("<Control-d>", lambda _event: self._duplicate_selected_steps())
+        self._step_tree.bind("<Alt-Up>", lambda _event: self._move_selected_steps(-1))
+        self._step_tree.bind("<Alt-Down>", lambda _event: self._move_selected_steps(1))
 
         self._step_ctx = tk.Menu(self._root, tearoff=0)
+        self._step_ctx.add_command(label="Insert Before", command=self._insert_step_before_selected)
+        self._step_ctx.add_command(label="Insert After", command=self._insert_step_after_selected)
+        self._step_ctx.add_separator()
         self._step_ctx.add_command(label="Copy", command=self._copy_selected_steps)
         self._step_ctx.add_command(label="Paste After", command=self._paste_steps_after_selected)
         self._step_ctx.add_command(label="Duplicate", command=self._duplicate_selected_steps)
+        self._step_ctx.add_separator()
+        self._step_ctx.add_command(label="Move Up", command=lambda: self._move_selected_steps(-1))
+        self._step_ctx.add_command(label="Move Down", command=lambda: self._move_selected_steps(1))
         self._step_ctx.add_separator()
         self._step_ctx.add_command(label="Delete", command=self._delete_step)
 
@@ -674,9 +690,11 @@ class OpentronsTab:
         ttk.Button(edit_btns, text="Copy", command=self._copy_selected_steps).pack(side="left", padx=3)
         ttk.Button(edit_btns, text="Paste After", command=self._paste_steps_after_selected).pack(side="left", padx=3)
         ttk.Button(edit_btns, text="Duplicate", command=self._duplicate_selected_steps).pack(side="left", padx=3)
+        ttk.Button(edit_btns, text="Move Up", command=lambda: self._move_selected_steps(-1)).pack(side="left", padx=3)
+        ttk.Button(edit_btns, text="Move Down", command=lambda: self._move_selected_steps(1)).pack(side="left", padx=3)
         ttk.Label(
             edit_btns,
-            text="Shortcuts: Ctrl+C copy, Ctrl+V paste after, Ctrl+D duplicate",
+            text="Shortcuts: Ctrl+C copy, Ctrl+V paste after, Ctrl+D duplicate, Alt+Up/Down move",
             foreground="#666",
         ).pack(side="left", padx=(8, 0))
 
@@ -1092,11 +1110,19 @@ class OpentronsTab:
                 if pipette_key == "secondary"
                 else (self._builder_tiprack_alias.get() or "").strip()
             )
-            alias = str(step.get("source_alias", "")).strip() or default_tiprack_alias
-            step["source_alias"] = alias
-            self._validate_alias(alias, "Tiprack alias")
             well = str(step.get("source_well", "")).strip().upper()
-            if well:
+            if not well:
+                step["source_alias"] = ""
+                step["source_well"] = ""
+            else:
+                alias = str(step.get("source_alias", "")).strip() or default_tiprack_alias
+                if alias != default_tiprack_alias:
+                    raise ValueError(
+                        f"Explicit {kind} wells must use the selected pipette tiprack alias "
+                        f"({default_tiprack_alias}), not {alias}."
+                    )
+                step["source_alias"] = alias
+                self._validate_alias(alias, "Tiprack alias")
                 self._validate_well(well, "Tip well")
                 step["source_well"] = well
 
@@ -1289,6 +1315,7 @@ class OpentronsTab:
         self._step_location_var.set("top")
         self._step_new_tip_var.set("once")
         self._step_pipette_key_var.set("primary")
+        self._step_auto_tip_var.set(True)
         self._step_repetitions_var.set("3")
         self._step_seconds_var.set("1")
         self._step_comment_var.set("")
@@ -1779,6 +1806,9 @@ class OpentronsTab:
         self._step_location_var.set(step.get("location", "top"))
         self._step_new_tip_var.set(step.get("new_tip", "once"))
         self._step_pipette_key_var.set(step.get("pipette_key", "primary"))
+        self._step_auto_tip_var.set(
+            not bool(step.get("source_well")) if step.get("kind") in {"pick_up_tip", "drop_tip"} else True
+        )
         self._step_repetitions_var.set(str(step.get("repetitions", "")))
         self._step_seconds_var.set(str(step.get("seconds", "")))
         self._step_comment_var.set(step.get("comment", step.get("message", "")))
@@ -1790,9 +1820,16 @@ class OpentronsTab:
             step["volume_ul"] = float(self._step_volume_var.get())
         if kind == "mix":
             step["repetitions"] = int(self._step_repetitions_var.get())
-        if kind in {"transfer", "aspirate", "move_to", "blow_out", "pick_up_tip", "drop_tip", "mix"}:
+        if kind in {"transfer", "aspirate", "move_to", "blow_out", "mix"}:
             step["source_alias"] = (self._step_source_alias_var.get() or "").strip()
             step["source_well"] = (self._step_source_well_var.get() or "").strip().upper()
+        if kind in {"pick_up_tip", "drop_tip"}:
+            if bool(self._step_auto_tip_var.get()):
+                step["source_alias"] = ""
+                step["source_well"] = ""
+            else:
+                step["source_alias"] = (self._step_source_alias_var.get() or "").strip()
+                step["source_well"] = (self._step_source_well_var.get() or "").strip().upper()
         if kind in {"transfer", "dispense"}:
             step["dest_alias"] = (self._step_dest_alias_var.get() or "").strip()
             step["dest_well"] = (self._step_dest_well_var.get() or "").strip().upper()
@@ -1836,6 +1873,32 @@ class OpentronsTab:
         self._refresh_step_tree()
         self._select_step_indices([len(self._step_rows) - 1])
         self.preview_builder_protocol()
+
+    def _insert_step_at(self, pos: int) -> None:
+        try:
+            step = self._validated_step_from_form()
+        except Exception:
+            return
+        pos = max(0, min(pos, len(self._step_rows)))
+        self._step_rows.insert(pos, step)
+        self._selected_step_index = None
+        self._refresh_step_tree()
+        self._select_step_indices([pos])
+        self.preview_builder_protocol()
+
+    def _insert_step_before_selected(self) -> None:
+        idxs = self._selected_step_indices()
+        if not idxs:
+            self._insert_step_at(0)
+            return
+        self._insert_step_at(idxs[0])
+
+    def _insert_step_after_selected(self) -> None:
+        idxs = self._selected_step_indices()
+        if not idxs:
+            self._insert_step_at(len(self._step_rows))
+            return
+        self._insert_step_at(idxs[-1] + 1)
 
     def _update_step(self) -> None:
         if self._selected_step_index is None:
@@ -1904,6 +1967,28 @@ class OpentronsTab:
         self._select_step_indices(list(range(insert_at, insert_at + len(duplicates))))
         self.preview_builder_protocol()
         self.log(f"Duplicated {len(duplicates)} builder step(s).")
+
+    def _move_selected_steps(self, direction: int) -> None:
+        idxs = self._selected_step_indices()
+        if not idxs:
+            messagebox.showwarning("No Selection", "Select one or more builder steps to move.")
+            return
+        if direction < 0:
+            if idxs[0] == 0:
+                return
+            for idx in idxs:
+                self._step_rows[idx - 1], self._step_rows[idx] = self._step_rows[idx], self._step_rows[idx - 1]
+            new_idxs = [idx - 1 for idx in idxs]
+        else:
+            if idxs[-1] >= len(self._step_rows) - 1:
+                return
+            for idx in reversed(idxs):
+                self._step_rows[idx], self._step_rows[idx + 1] = self._step_rows[idx + 1], self._step_rows[idx]
+            new_idxs = [idx + 1 for idx in idxs]
+        self._selected_step_index = None
+        self._refresh_step_tree()
+        self._select_step_indices(new_idxs)
+        self.preview_builder_protocol()
 
     def _show_step_ctx(self, event) -> None:
         row = self._step_tree.identify_row(event.y)

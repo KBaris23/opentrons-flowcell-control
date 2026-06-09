@@ -132,11 +132,21 @@ def normalize_protocol_spec(raw: dict[str, Any]) -> dict[str, Any]:
             default_tiprack_alias = primary_pipette["tiprack_alias"]
             if cleaned.get("pipette_key") == "secondary" and secondary_pipette is not None:
                 default_tiprack_alias = secondary_pipette["tiprack_alias"]
-            cleaned["source_alias"] = normalize_identifier(
-                step.get("source_alias", default_tiprack_alias),
-                fallback=default_tiprack_alias,
-            )
-            cleaned["source_well"] = str(step.get("source_well", "")).strip().upper()
+            source_well = str(step.get("source_well", "")).strip().upper()
+            if source_well:
+                source_alias = normalize_identifier(
+                    step.get("source_alias", default_tiprack_alias),
+                    fallback=default_tiprack_alias,
+                )
+                if source_alias != default_tiprack_alias:
+                    raise ValueError(
+                        f"Step {idx} explicit {kind} wells must use {default_tiprack_alias}, not {source_alias}."
+                    )
+                cleaned["source_alias"] = source_alias
+                cleaned["source_well"] = source_well
+            else:
+                cleaned["source_alias"] = ""
+                cleaned["source_well"] = ""
         cleaned_steps.append(cleaned)
 
     return {
@@ -388,14 +398,14 @@ def generate_protocol_source(raw_spec: dict[str, Any]) -> tuple[str, dict[str, A
         elif kind == "pause":
             lines.append(f"    protocol.pause({step['message']!r})")
         elif kind == "pick_up_tip":
-            src = alias_map[step["source_alias"]]
             if step["source_well"]:
+                src = alias_map[step["source_alias"]]
                 lines.append(f"    {pipette_var}.pick_up_tip({src}[{step['source_well']!r}])")
             else:
                 lines.append(f"    {pipette_var}.pick_up_tip()")
         elif kind == "drop_tip":
-            src = alias_map[step["source_alias"]]
             if step["source_well"]:
+                src = alias_map[step["source_alias"]]
                 lines.append(f"    {pipette_var}.drop_tip({src}[{step['source_well']!r}])")
             else:
                 lines.append(f"    {pipette_var}.drop_tip()")
