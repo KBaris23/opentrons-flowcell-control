@@ -1,0 +1,57 @@
+{
+  "items": [
+    {
+      "type": "PAUSE",
+      "status": "pending",
+      "details": "Pause for 3600.0 sec",
+      "pause_seconds": 3600.0
+    },
+    {
+      "type": "OPENTRONS_PROTOCOL",
+      "status": "pending",
+      "details": "Opentrons ROBOT autoimmobilization.py [pause-aware]",
+      "opentrons_action": {
+        "name": "PROTOCOL",
+        "params": {
+          "mode": "robot",
+          "protocol_name": "autoimmobilization",
+          "protocol_id": "otproto_691ede0aec696f22",
+          "protocol_path": "opentrons_protocols\\library\\autoimmobilization.py",
+          "resume_key": "resume_otproto_691ede0aec696f22",
+          "supports_pause": true,
+          "robot_host": "169.254.229.52",
+          "robot_port": 31950,
+          "tip_override": {
+            "enabled": false
+          }
+        }
+      }
+    },
+    {
+      "type": "PAUSE",
+      "status": "pending",
+      "details": "Pause for 3600.0 sec",
+      "pause_seconds": 3600.0
+    },
+    {
+      "type": "OPENTRONS_RESUME",
+      "status": "pending",
+      "details": "Opentrons RESUME autoimmobilization",
+      "opentrons_action": {
+        "name": "RESUME",
+        "params": {
+          "protocol_name": "autoimmobilization",
+          "protocol_id": "otproto_691ede0aec696f22",
+          "protocol_path": "opentrons_protocols\\library\\autoimmobilization.py",
+          "resume_key": "resume_otproto_691ede0aec696f22"
+        }
+      }
+    },
+    {
+      "type": "ALERT",
+      "status": "pending",
+      "details": "Alert: aptamer put in buffer, chip ready to use!",
+      "alert_message": "aptamer put in buffer, chip ready to use!"
+    }
+  ]
+}

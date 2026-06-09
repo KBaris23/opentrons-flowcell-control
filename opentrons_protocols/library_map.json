@@ -999,5 +999,160 @@
     "added_at": "2026-04-17T18:00:43",
     "filepath": "opentrons_protocols\\library\\Titration_Amp0_10_steps.py",
     "protocol_id": "otproto_7d3637d14243aebc"
+  },
+  "generated_ui_protocol_37fab6": {
+    "kind": "generated_ui_protocol",
+    "params": {
+      "labware": [
+        {
+          "alias": "tips_20ul",
+          "load_name": "opentrons_96_filtertiprack_20ul",
+          "slot": "7"
+        },
+        {
+          "alias": "tips_200ul",
+          "load_name": "opentrons_96_filtertiprack_200ul",
+          "slot": "8"
+        },
+        {
+          "alias": "reagents",
+          "load_name": "opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap",
+          "slot": "2"
+        }
+      ],
+      "metadata": {
+        "api_level": "2.19",
+        "author": "Opentrons Flowcell Console",
+        "description": "wait 1hr, pull aptamer solution replace with c6, wait 1hr, pull c6 replace with buffer, alert",
+        "protocol_name": "autoimmobilization",
+        "robot_type": "OT-2"
+      },
+      "pipette": {
+        "model": "p20_single_gen2",
+        "mount": "left",
+        "starting_tip": "A1",
+        "tiprack_alias": "tips_20ul"
+      },
+      "secondary_pipette": {
+        "model": "p300_single_gen2",
+        "mount": "right",
+        "starting_tip": "A2",
+        "tiprack_alias": "tips_200ul"
+      },
+      "steps": [
+        {
+          "dest_alias": "reagents",
+          "dest_well": "B4",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "D2",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "B4",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "D2",
+          "volume_ul": 100.0
+        },
+        {
+          "comment": "aptamer solution removed",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "D2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "B2",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "D2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "B2",
+          "volume_ul": 100.0
+        },
+        {
+          "comment": "c6 added",
+          "kind": "comment"
+        },
+        {
+          "kind": "pause",
+          "message": "pause for a 1hr wait"
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "B4",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "D2",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "B4",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "D2",
+          "volume_ul": 100.0
+        },
+        {
+          "comment": "aptamer solution removed",
+          "kind": "comment"
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "D2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "B3",
+          "volume_ul": 200.0
+        },
+        {
+          "dest_alias": "reagents",
+          "dest_well": "D2",
+          "kind": "transfer",
+          "location": "bottom",
+          "new_tip": "always",
+          "pipette_key": "secondary",
+          "source_alias": "reagents",
+          "source_well": "B3",
+          "volume_ul": 100.0
+        },
+        {
+          "comment": "buffer solution added",
+          "kind": "comment"
+        }
+      ]
+    },
+    "note": "autoimmobilization",
+    "added_at": "2026-06-08T22:29:10",
+    "filepath": "opentrons_protocols\\library\\autoimmobilization.py",
+    "protocol_id": "otproto_691ede0aec696f22"
   }
 }
