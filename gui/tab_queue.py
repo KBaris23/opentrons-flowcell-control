@@ -90,6 +90,7 @@ class QueueTab:
         self._preconfirmed_opentrons_indices: set[int] = set()
         self._opentrons_left_unhomed_after_stop = False
         self._pump_recovery_needed = False
+        self._queue_midpoint_slack_sent = False
 
         self._build()
         self._session.register_collection_state_listener(self._schedule_refresh_labels)
@@ -1345,6 +1346,7 @@ class QueueTab:
             )
         if not self._preflight_queue_start(start_index=0):
             return
+        self._queue_midpoint_slack_sent = False
         self._session.is_running = True
         self._session.update_queue_status(
             state="running",
@@ -1401,6 +1403,7 @@ class QueueTab:
             )
         if not self._preflight_queue_start(start_index=idx):
             return
+        self._queue_midpoint_slack_sent = False
         self._session.is_running = True
         self._session.update_queue_status(
             state="running",
@@ -1671,6 +1674,11 @@ class QueueTab:
                 active_step_type=active_step_type,
                 active_step_details=active_step_details,
             )
+            self._maybe_announce_queue_midpoint(
+                start_index=start_index,
+                current_position=i - start_index + 1,
+                total=len(queue) - start_index,
+            )
             self.log(f"Queue start -> {item.get('details', item.get('type'))}")
 
             csv_path = None
@@ -1820,6 +1828,9 @@ class QueueTab:
             f"Queue started: {total} item(s). "
             f"Session={session_name}; Experiment={experiment_name}."
         )
+        eta_text = self._queue_eta_text_for_slack(start_index=start_index)
+        if eta_text:
+            msg += "\n\n" + eta_text
         try:
             session_mgr.log(msg)
         except Exception:
@@ -1828,6 +1839,35 @@ class QueueTab:
             session_mgr.notify_slack(msg)
         except Exception:
             pass
+
+    def _queue_eta_text_for_slack(self, start_index: int | None = None) -> str:
+        try:
+            if start_index is None:
+                return self.get_slack_eta_text()
+            step_delay = getattr(self._session, "step_delay", 0.0) or 0.0
+            eta = estimate_queue_eta(
+                list(self._session.measurement_queue),
+                start_index=start_index,
+                step_delay_seconds=step_delay,
+                scope="active run",
+            )
+            return format_static_eta_text(eta)
+        except Exception:
+            return ""
+
+    def _maybe_announce_queue_midpoint(self, *, start_index: int, current_position: int, total: int) -> None:
+        if self._queue_midpoint_slack_sent or total < 2:
+            return
+        midpoint_position = (total // 2) + 1
+        if current_position < midpoint_position:
+            return
+
+        self._queue_midpoint_slack_sent = True
+        msg = f"Queue halfway update: step {current_position}/{total} is now running."
+        eta_text = self._queue_eta_text_for_slack()
+        if eta_text:
+            msg += "\n\n" + eta_text
+        self._notify_slack(msg)
 
     @staticmethod
     def _queue_item_label(item: dict) -> str:
